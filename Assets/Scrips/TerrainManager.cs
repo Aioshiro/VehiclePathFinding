@@ -14,13 +14,7 @@ public class TerrainManager : MonoBehaviour {
 
     public GameObject flag;
 
-
-    // Use this for initialization
-    void Start()
-    {
-
-    }
-
+   
     // Use this for initialization
     void Awake()
     {
@@ -44,19 +38,15 @@ public class TerrainManager : MonoBehaviour {
 
         myInfo.CreateCubes();
 
-        Instantiate(flag, myInfo.start_pos, Quaternion.identity);
-        Instantiate(flag, myInfo.goal_pos, Quaternion.identity);
+        GameObject startPole = Instantiate(flag, myInfo.start_pos, Quaternion.identity);
+        startPole.transform.parent = this.transform;
+        GameObject endPole = Instantiate(flag, myInfo.goal_pos, Quaternion.identity);
+        endPole.transform.parent = this.transform;
 
 
 
     }
 
-
-
-    // Update is called once per frame
-    void Update () {
-		
-	}
 }
 
 
@@ -76,7 +66,8 @@ public class TerrainInfo
     public Vector3 start_pos;
     public Vector3 goal_pos;
 
-    
+    private TerrainManager terrainManager;
+
     public void TerrainInfo2()
     {
         file_name = "my_terrain";
@@ -151,6 +142,7 @@ public class TerrainInfo
 
     public void CreateCubes()
     {
+        terrainManager = UnityEngine.Object.FindObjectOfType<TerrainManager>();
         float x_step = (x_high - x_low) / x_N;
         float z_step = (z_high - z_low) / z_N;
         for (int i = 0; i < x_N; i++)
@@ -162,6 +154,7 @@ public class TerrainInfo
                     GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     cube.transform.position = new Vector3(get_x_pos(i), 0.0f, get_z_pos(j));
                     cube.transform.localScale = new Vector3(x_step, 15.0f, z_step);
+                    cube.transform.parent = terrainManager.transform;
                 }
 
             }

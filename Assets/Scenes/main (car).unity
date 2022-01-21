@@ -8339,6 +8339,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   terrain_manager_game_object: {fileID: 1358011048}
+  my_path: []
 --- !u!1 &1788454091
 GameObject:
   m_ObjectHideFlags: 0

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using System;
 
-
 namespace UnityStandardAssets.Vehicles.Car
 {
     [RequireComponent(typeof(CarController))]
@@ -13,6 +12,8 @@ namespace UnityStandardAssets.Vehicles.Car
 
         public GameObject terrain_manager_game_object;
         TerrainManager terrain_manager;
+
+        [SerializeField] private List<Vector3> my_path;
 
         private void Start()
         {
@@ -27,15 +28,15 @@ namespace UnityStandardAssets.Vehicles.Car
             Vector3 start_pos = terrain_manager.myInfo.start_pos;
             Vector3 goal_pos = terrain_manager.myInfo.goal_pos;
 
-            List<Vector3> my_path = new List<Vector3>();
+            my_path = new List<Vector3>();
 
             my_path.Add(start_pos);
 
-            for (int i = 0; i < 3; i++)
-            {
-                Vector3 waypoint = start_pos + new Vector3(UnityEngine.Random.Range(-50.0f, 50.0f), 0, UnityEngine.Random.Range(-30.0f, 30.0f));
-                my_path.Add(waypoint);
-            }
+            //for (int i = 0; i < 3; i++)
+            //{
+            //    Vector3 waypoint = start_pos + new Vector3(UnityEngine.Random.Range(-50.0f, 50.0f), 0, UnityEngine.Random.Range(-30.0f, 30.0f));
+            //    my_path.Add(waypoint);
+            //}
             my_path.Add(goal_pos);
 
 
@@ -79,6 +80,11 @@ namespace UnityStandardAssets.Vehicles.Car
             // this is how you control the car
             m_Car.Move(1f, 1f, 1f, 0f);
 
+        }
+
+        private void InformedRRTStar(Vector3 start_pos, Vector3 goal_pos)
+        {
+            return;
         }
     }
 }
