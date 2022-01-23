@@ -8345,7 +8345,7 @@ MonoBehaviour:
   eta: 2
   rTT: 0.01
   sphereRadius: 1
-  NumberOfIterations: 60000
+  NumberOfIterations: 1000
 --- !u!1 &1788454091
 GameObject:
   m_ObjectHideFlags: 0

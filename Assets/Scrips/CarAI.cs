@@ -93,20 +93,22 @@ namespace UnityStandardAssets.Vehicles.Car
 
         private (List<Vector3>, List<(Vector3, Vector3)>) RRT(int N, Vector3 xStart, Vector3 xGoal)
         {
+            ///Initializating graph
             List<Vector3> V = new List<Vector3>
             {
                 xStart
             };
             List<(Vector3, Vector3)> E = new List<(Vector3, Vector3)>();
+
             for (int i = 0; i < N; i++)
             {
-                Vector3 xRand = new Vector3(2 * UnityEngine.Random.value - 1, 0, 2 * UnityEngine.Random.value - 1);
-                xRand *= 62.5f; //Sampling random pos in the maze
-                Vector3 xCentre = (xStart + xGoal) / 2;
-                xRand += new Vector3(xCentre.x, 0, xCentre.z);
+                //Sampling random pos in the maze
+                Vector3 xRand = SamplePointInMaze();
+                //Finding nearest point of xRand in the graph
                 Vector3 xNearest = Nearest(V, xRand);
+                //Creating new Point between xNearest and xRand but close to xNearest
                 Vector3 xNew = Steer(xNearest, xRand);
-                if (!Physics.Raycast(xNearest, (xNew - xNearest).normalized, Vector3.Distance(xNearest, xNew), LayerMask.GetMask("Wall"))) //Checking if no collision
+                if (CollisionFree(xNearest, xNew)) // If we can go to xNearest to xNew, we add xNew to the graph
                 {
                     V.Add(xNew);
                     E.Add((xNearest, xNew));
@@ -117,6 +119,7 @@ namespace UnityStandardAssets.Vehicles.Car
 
         private (List<Vector3>, List<(Vector3, Vector3)>) RRTStar(int N, Vector3 xStart, Vector3 xGoal)
         {
+            ///Initializating graph
             List<Vector3> V = new List<Vector3>
             {
                 xStart
@@ -125,17 +128,15 @@ namespace UnityStandardAssets.Vehicles.Car
             for (int i = 0; i < N; i++)
             {
                 //Sampling random pos in the maze
-                Vector3 xRand = new Vector3(2 * UnityEngine.Random.value - 1, 0, 2 * UnityEngine.Random.value - 1);
-                xRand *= 62.5f;
-                Vector3 xCentre = (xStart + xGoal) / 2;
-                xRand += new Vector3(xCentre.x, 0, xCentre.z);
-
+                Vector3 xRand = SamplePointInMaze();
+                //Finding nearest point of xRand in the graph
                 Vector3 xNearest = Nearest(V, xRand);
-
+                //Creating new Point between xNearest and xRand but close to xNearest
                 Vector3 xNew = Steer(xNearest, xRand);
 
-                if (!Physics.Raycast(xNearest, (xNew - xNearest).normalized, Vector3.Distance(xNearest, xNew), LayerMask.GetMask("Wall"))) //Checking if no collision
+                if (CollisionFree(xNearest, xNew)) 
                 {
+                    // If we can go to xNearest to xNew, we add xNew to the graph and link it to the closest neighboor
                     List<Vector3> XNear = Near(V, xNew, rTT);
                     V.Add(xNew);
                     Vector3 xMin = xNearest;
@@ -143,7 +144,7 @@ namespace UnityStandardAssets.Vehicles.Car
                     foreach (Vector3 xNear in XNear)
                     {
                         float cNew = Vector3.Distance(xNear, start_pos) + Vector3.Distance(xNear, xNew);
-                        if (cNew < cMin && !Physics.Raycast(xNear, (xNew - xNear).normalized, Vector3.Distance(xNear, xNew), LayerMask.GetMask("Wall")))
+                        if (cNew < cMin && CollisionFree(xNear, xNew))
                         {
                             xMin = xNear;
                             cMin = cNew;
@@ -153,16 +154,13 @@ namespace UnityStandardAssets.Vehicles.Car
                     foreach (Vector3 xNear in XNear)
                     {
                         float cNew = Vector3.Distance(xNew, start_pos) + Vector3.Distance(xNear, xNew);
-                        if (cNew < Vector3.Distance(xNear, start_pos) && !Physics.Raycast(xNear, (xNew - xNear).normalized, Vector3.Distance(xNear, xNew), LayerMask.GetMask("Wall")))
+                        if (cNew < Vector3.Distance(xNear, start_pos) && CollisionFree(xNear, xNew))
                         {
                             foreach ((Vector3, Vector3) edge in E)
                             {
                                 if (edge.Item2 == xNear)
                                 {
-                                    if (!E.Remove(edge))
-                                    {
-                                        Debug.Log("could not remove old edge");
-                                    }
+                                    E.Remove(edge);
                                     E.Add((xNew, xNear));
                                     break;
                                 }
@@ -176,6 +174,7 @@ namespace UnityStandardAssets.Vehicles.Car
 
         private (List<Vector3>, List<(Vector3, Vector3)>) InformedRRTStar(int N, Vector3 xStart, Vector3 xGoal)
         {
+            ///Initializating variables
             List<Vector3> V = new List<Vector3>
             {
                 xStart
@@ -185,6 +184,7 @@ namespace UnityStandardAssets.Vehicles.Car
             float cBest;
             for (int i = 0; i < N; i++)
             {
+                //Calculating min(costs(XsoIn)), if it's empty, return +inf
                 if (XsoIn.Count == 0)
                 {
                     cBest = Mathf.Infinity;
@@ -200,13 +200,14 @@ namespace UnityStandardAssets.Vehicles.Car
                 }
                 //Sampling random pos in the maze
                 Vector3 xRand = Sample(xStart, xGoal, cBest);
-
+                //Finding nearest point of xRand in the graph
                 Vector3 xNearest = Nearest(V, xRand);
-
+                //Creating new Point between xNearest and xRand but close to xNearest
                 Vector3 xNew = Steer(xNearest, xRand);
 
-                if (!Physics.Raycast(xNearest, (xNew - xNearest).normalized, Vector3.Distance(xNearest, xNew), LayerMask.GetMask("Wall"))) //Checking if no collision
+                if (CollisionFree(xNearest,xNew))
                 {
+                    // If we can go to xNearest to xNew, we add xNew to the graph and link it to the closest neighboor
                     List<Vector3> XNear = Near(V, xNew, rTT);
                     V.Add(xNew);
                     Vector3 xMin = xNearest;
@@ -214,7 +215,7 @@ namespace UnityStandardAssets.Vehicles.Car
                     foreach (Vector3 xNear in XNear)
                     {
                         float cNew = Vector3.Distance(xNear, start_pos) + Vector3.Distance(xNear, xNew);
-                        if (cNew < cMin && !Physics.Raycast(xNear, (xNew - xNear).normalized, Vector3.Distance(xNear, xNew), LayerMask.GetMask("Wall")))
+                        if (cNew < cMin && CollisionFree(xNear,xNew))
                         {
                             xMin = xNear;
                             cMin = cNew;
@@ -224,16 +225,13 @@ namespace UnityStandardAssets.Vehicles.Car
                     foreach (Vector3 xNear in XNear)
                     {
                         float cNew = Vector3.Distance(xNew, start_pos) + Vector3.Distance(xNear, xNew);
-                        if (cNew < Vector3.Distance(xNear, start_pos) && !Physics.Raycast(xNear, (xNew - xNear).normalized, Vector3.Distance(xNear, xNew), LayerMask.GetMask("Wall")))
+                        if (cNew < Vector3.Distance(xNear, start_pos) &&CollisionFree(xNear,xNew))
                         {
                             foreach ((Vector3, Vector3) edge in E)
                             {
                                 if (edge.Item2 == xNear)
                                 {
-                                    if (!E.Remove(edge))
-                                    {
-                                        Debug.Log("could not remove old edge");
-                                    }
+                                    E.Remove(edge);
                                     E.Add((xNew, xNear));
                                     break;
                                 }
@@ -242,12 +240,27 @@ namespace UnityStandardAssets.Vehicles.Car
                     }
                     if (Physics.CheckSphere(xNew, sphereRadius, LayerMask.GetMask("Goal")))
                     {
+                        //If xNew in near goal, that means we found an admissible path !
                         XsoIn.Add(xNew);
                     }
                 }
             }
             return (V, E);
         }
+
+        private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
+        {
+            return (!Physics.Raycast(xStart, (xEnd - xStart).normalized, Vector3.Distance(xStart, xEnd), LayerMask.GetMask("Wall")));
+        }
+
+        private Vector3 SamplePointInMaze()
+        {
+            Vector3 xRand = new Vector3(2 * UnityEngine.Random.value - 1, 0, 2 * UnityEngine.Random.value - 1);
+            xRand *= terrainSize; //Sampling random pos in the maze
+            xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
+            return xRand;
+        }
+
         private Vector3 Sample(Vector3 xStart,Vector3 xGoal, float cMax)
         {
             Vector3 xRand;
@@ -258,13 +271,12 @@ namespace UnityStandardAssets.Vehicles.Car
                 Vector2 xBall = UnityEngine.Random.insideUnitCircle;
                 xBall.Normalize();
                 xRand = new Vector3(C.Item1 * r1 * xBall.x + C.Item2 * r2 * xBall.y,0, C.Item3 * r1 * xBall.x + C.Item4 * r2 * xBall.y);
+                xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
             }
             else
             {
-                xRand = new Vector3(2*UnityEngine.Random.value-1,0,2* UnityEngine.Random.value-1);
-                xRand *= terrainSize; //Sampling random pos in the maze
+                xRand = SamplePointInMaze();
             }
-            xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
             return new Vector3(xRand.x, 0, xRand.z);
         }
 
