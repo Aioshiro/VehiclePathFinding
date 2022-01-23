@@ -7910,7 +7910,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1497946388}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 96468c245ae8e0d4f8f1c7a7b8b0542e, type: 3}
   m_Name: 
@@ -8333,13 +8333,19 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1497946388}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 57f37a74d9bc64bfab28e1fee11436aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   terrain_manager_game_object: {fileID: 1358011048}
-  my_path: []
+  my_path:
+  - {x: 185, y: 0, z: 137}
+  - {x: 124, y: 0, z: 134}
+  eta: 2
+  rTT: 0.01
+  sphereRadius: 1
+  NumberOfIterations: 60000
 --- !u!1 &1788454091
 GameObject:
   m_ObjectHideFlags: 0
