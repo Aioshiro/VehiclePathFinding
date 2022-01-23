@@ -50,7 +50,7 @@ namespace UnityStandardAssets.Vehicles.Car
             terrainCenter /= 2;
             terrainSize = Mathf.Max(terrain_manager.myInfo.x_high - terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high - terrain_manager.myInfo.z_low)/2;
             cMin = Vector3.Distance(start_pos, goal_pos);
-            C = RotationToWorldFrameBis(start_pos, goal_pos);
+            C = RotationToWorldFrame(start_pos, goal_pos);
 
             // Plot your path to see if it makes sense
             // Note that path can only be seen in "Scene" window, not "Game" window
@@ -203,7 +203,7 @@ namespace UnityStandardAssets.Vehicles.Car
                     cBest = Mathf.Min(costs.ToArray());
                 }
                 //Sampling random pos in the maze
-                Vector3 xRand = Sample(xStart, xGoal, cBest);
+                Vector3 xRand = Sample(cBest);
                 //Finding nearest point of xRand in the graph
                 Vector3 xNearest = Nearest(V, xRand);
                 //Creating new Point between xNearest and xRand but close to xNearest
@@ -268,7 +268,7 @@ namespace UnityStandardAssets.Vehicles.Car
             return xRand;
         }
 
-        private Vector3 Sample(Vector3 xStart,Vector3 xGoal, float cMax)
+        private Vector3 Sample(float cMax)
         {
             Vector3 xRand;
             if (cMax < Mathf.Infinity)
@@ -276,7 +276,6 @@ namespace UnityStandardAssets.Vehicles.Car
                 float r1 = cMax / 2;
                 float r2 = Mathf.Sqrt(cMax * cMax - cMin * cMin) / 2;
                 Vector2 xBall = UnityEngine.Random.insideUnitCircle;
-                xBall.Normalize();
                 xRand = new Vector3(C.Item1 * r1 * xBall.x + C.Item2 * r2 * xBall.y,0, C.Item3 * r1 * xBall.x + C.Item4 * r2 * xBall.y);
                 xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
             }
@@ -287,27 +286,7 @@ namespace UnityStandardAssets.Vehicles.Car
             return new Vector3(xRand.x, 0, xRand.z);
         }
 
-        private (float,float,float,float) RotationToWorldFrame(Vector3 xStart, Vector3 xGoal)
-        {
-            Vector3 a = xGoal - xStart;
-            a.Normalize();
-            Vector2 a1 = new Vector2(a.x, a.z);
-            //Calculating SVD of ((a1.x 0),(a1.y 0))
-            float theta = (float)0.5 * Mathf.Atan2(2 * a1.x * a1.y, a1.x * a1.x - a1.y * a1.y);
-            float phi = (float)0.5 * Mathf.Atan2(0, a1.x * a1.x + a1.y * a1.y);
-            float s11 = (a1.x * Mathf.Cos(theta) + a1.y * Mathf.Sin(theta)) * Mathf.Cos(phi);
-            float s22 = (a1.x * Mathf.Sin(theta) - a1.y * Mathf.Cos(theta)) * Mathf.Cos(phi);
-            s11 = Mathf.Sign(s11);
-            s22 = Mathf.Sign(s22);
-            return (s11 * Mathf.Cos(phi) * Mathf.Cos(theta) + s11 * Mathf.Sin(phi) * Mathf.Sin(theta),
-                +s22 * Mathf.Cos(theta) * Mathf.Sin(phi) - s22 * Mathf.Cos(phi) * Mathf.Sin(theta),
-                -s11 * Mathf.Cos(phi) * Mathf.Sin(theta) + s11 * Mathf.Sin(phi) * Mathf.Cos(theta),
-                +s22 * Mathf.Sin(phi) * Mathf.Sin(theta) + s22 * Mathf.Cos(phi) * Mathf.Cos(theta)
-                );
-
-        }
-
-        private (float, float, float, float) RotationToWorldFrameBis(Vector3 xStart, Vector3 xGoal)
+        private (float, float, float, float) RotationToWorldFrame(Vector3 xStart, Vector3 xGoal)
         {
             Vector3 a = xGoal - xStart;
             a.Normalize();
