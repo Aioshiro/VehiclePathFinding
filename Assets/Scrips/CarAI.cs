@@ -54,10 +54,10 @@ namespace UnityStandardAssets.Vehicles.Car
 
             // Plot your path to see if it makes sense
             // Note that path can only be seen in "Scene" window, not "Game" window
-            (List<Vector3>, List<(Vector3, Vector3)>) Graph = InformedRRTStar(NumberOfIterations, start_pos, goal_pos);
-            foreach (var edge in Graph.Item2)
+            (List<Vector3>, Dictionary<Vector3, Vector3>) Graph = InformedRRTStar(NumberOfIterations, start_pos, goal_pos);
+            foreach (var key in Graph.Item2.Keys)
             {
-                Debug.DrawLine(edge.Item1, edge.Item2, Color.red,100f,false);
+                Debug.DrawLine(key, Graph.Item2[key], Color.red,100f,false);
             }
 
             
@@ -93,14 +93,14 @@ namespace UnityStandardAssets.Vehicles.Car
 
         }
 
-        private (List<Vector3>, List<(Vector3, Vector3)>) RRT(int N, Vector3 xStart, Vector3 xGoal)
+        private (List<Vector3>, Dictionary<Vector3, Vector3>) RRT(int N, Vector3 xStart, Vector3 xGoal)
         {
             ///Initializating graph
             List<Vector3> V = new List<Vector3>
             {
                 xStart
             };
-            List<(Vector3, Vector3)> E = new List<(Vector3, Vector3)>();
+            Dictionary<Vector3, Vector3> parents = new Dictionary<Vector3, Vector3>();
 
             for (int i = 0; i < N; i++)
             {
@@ -113,20 +113,20 @@ namespace UnityStandardAssets.Vehicles.Car
                 if (CollisionFree(xNearest, xNew)) // If we can go to xNearest to xNew, we add xNew to the graph
                 {
                     V.Add(xNew);
-                    E.Add((xNearest, xNew));
+                    parents.Add(xNew, xNearest);
                 }
             }
-            return (V, E);
+            return (V, parents);
         }
 
-        private (List<Vector3>, List<(Vector3, Vector3)>) RRTStar(int N, Vector3 xStart, Vector3 xGoal)
+        private (List<Vector3>, Dictionary<Vector3, Vector3>) RRTStar(int N, Vector3 xStart, Vector3 xGoal)
         {
             ///Initializating graph
             List<Vector3> V = new List<Vector3>
             {
                 xStart
             };
-            List<(Vector3, Vector3)> E = new List<(Vector3, Vector3)>();
+            Dictionary<Vector3, Vector3> parents = new Dictionary<Vector3, Vector3>();
             for (int i = 0; i < N; i++)
             {
                 //Sampling random pos in the maze
@@ -152,36 +152,38 @@ namespace UnityStandardAssets.Vehicles.Car
                             cMin = cNew;
                         }
                     }
-                    E.Add((xMin, xNew));
+                    //E.Add((xMin, xNew));
+                    parents.Add(xNew, xMin);
                     foreach (Vector3 xNear in XNear)
                     {
                         float cNew = Vector3.Distance(xNew, start_pos) + Vector3.Distance(xNear, xNew);
                         if (cNew < Vector3.Distance(xNear, start_pos) && CollisionFree(xNear, xNew))
                         {
-                            foreach ((Vector3, Vector3) edge in E)
-                            {
-                                if (edge.Item2 == xNear)
-                                {
-                                    E.Remove(edge);
-                                    E.Add((xNew, xNear));
-                                    break;
-                                }
-                            }
+                            //foreach ((Vector3, Vector3) edge in E)
+                            //{
+                            //    if (edge.Item2 == xNear)
+                            //    {
+                            //        E.Remove(edge);
+                            //        E.Add((xNew, xNear));
+                            //        break;
+                            //    }
+                            //}
+                            parents[xNew] = xNear;
                         }
                     }
                 }
             }
-            return (V, E);
+            return (V, parents);
         }
 
-        private (List<Vector3>, List<(Vector3, Vector3)>) InformedRRTStar(int N, Vector3 xStart, Vector3 xGoal)
+        private (List<Vector3>, Dictionary<Vector3, Vector3>) InformedRRTStar(int N, Vector3 xStart, Vector3 xGoal)
         {
             ///Initializating variables
             List<Vector3> V = new List<Vector3>
             {
                 xStart
             };
-            List<(Vector3, Vector3)> E = new List<(Vector3, Vector3)>();
+            Dictionary<Vector3, Vector3> parents = new Dictionary<Vector3, Vector3>();
             List<Vector3> XsoIn = new List<Vector3>();
             float cBest;
             for (int i = 0; i < N; i++)
@@ -223,21 +225,23 @@ namespace UnityStandardAssets.Vehicles.Car
                             cMin = cNew;
                         }
                     }
-                    E.Add((xMin, xNew));
+                    //E.Add((xMin, xNew));
+                    parents[xNew] = xMin;
                     foreach (Vector3 xNear in XNear)
                     {
                         float cNew = Vector3.Distance(xNew, start_pos) + Vector3.Distance(xNear, xNew);
                         if (cNew < Vector3.Distance(xNear, start_pos) &&CollisionFree(xNear,xNew))
                         {
-                            foreach ((Vector3, Vector3) edge in E)
-                            {
-                                if (edge.Item2 == xNear)
-                                {
-                                    E.Remove(edge);
-                                    E.Add((xNew, xNear));
-                                    break;
-                                }
-                            }
+                            //foreach ((Vector3, Vector3) edge in E)
+                            //{
+                            //    if (edge.Item2 == xNear)
+                            //    {
+                            //        E.Remove(edge);
+                            //        E.Add((xNew, xNear));
+                            //        break;
+                            //    }
+                            //}
+                            parents[xNew] = xNear;
                         }
                     }
                     if (Physics.CheckSphere(xNew, sphereRadius, LayerMask.GetMask("Goal")))
@@ -247,7 +251,7 @@ namespace UnityStandardAssets.Vehicles.Car
                     }
                 }
             }
-            return (V, E);
+            return (V, parents);
         }
 
         private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
