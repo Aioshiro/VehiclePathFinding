@@ -54,10 +54,20 @@ namespace UnityStandardAssets.Vehicles.Car
 
             // Plot your path to see if it makes sense
             // Note that path can only be seen in "Scene" window, not "Game" window
-            (List<Vector3>, Dictionary<Vector3, Vector3>) Graph = InformedRRTStar(NumberOfIterations, start_pos, goal_pos);
+            (List<Vector3>, Dictionary<Vector3, Vector3>,Vector3) Graph = InformedRRTStar(NumberOfIterations, start_pos, goal_pos);
+
+            //Recreating the tree
             foreach (var key in Graph.Item2.Keys)
             {
                 Debug.DrawLine(key, Graph.Item2[key], Color.red,100f,false);
+            }
+
+            //Recreating the path
+            Vector3 currentPoint = Graph.Item3;
+            while (Graph.Item2.TryGetValue(currentPoint, out Vector3 parent))
+            {
+                Debug.DrawLine(currentPoint, parent, Color.green, 100f, false);
+                currentPoint = parent;
             }
 
             
@@ -152,22 +162,12 @@ namespace UnityStandardAssets.Vehicles.Car
                             cMin = cNew;
                         }
                     }
-                    //E.Add((xMin, xNew));
                     parents.Add(xNew, xMin);
                     foreach (Vector3 xNear in XNear)
                     {
                         float cNew = Vector3.Distance(xNew, start_pos) + Vector3.Distance(xNear, xNew);
                         if (cNew < Vector3.Distance(xNear, start_pos) && CollisionFree(xNear, xNew))
                         {
-                            //foreach ((Vector3, Vector3) edge in E)
-                            //{
-                            //    if (edge.Item2 == xNear)
-                            //    {
-                            //        E.Remove(edge);
-                            //        E.Add((xNew, xNear));
-                            //        break;
-                            //    }
-                            //}
                             parents[xNew] = xNear;
                         }
                     }
@@ -176,7 +176,7 @@ namespace UnityStandardAssets.Vehicles.Car
             return (V, parents);
         }
 
-        private (List<Vector3>, Dictionary<Vector3, Vector3>) InformedRRTStar(int N, Vector3 xStart, Vector3 xGoal)
+        private (List<Vector3>, Dictionary<Vector3, Vector3>,Vector3) InformedRRTStar(int N, Vector3 xStart, Vector3 xGoal)
         {
             ///Initializating variables
             List<Vector3> V = new List<Vector3>
@@ -225,22 +225,12 @@ namespace UnityStandardAssets.Vehicles.Car
                             cMin = cNew;
                         }
                     }
-                    //E.Add((xMin, xNew));
                     parents[xNew] = xMin;
                     foreach (Vector3 xNear in XNear)
                     {
                         float cNew = Vector3.Distance(xNew, start_pos) + Vector3.Distance(xNear, xNew);
                         if (cNew < Vector3.Distance(xNear, start_pos) &&CollisionFree(xNear,xNew))
                         {
-                            //foreach ((Vector3, Vector3) edge in E)
-                            //{
-                            //    if (edge.Item2 == xNear)
-                            //    {
-                            //        E.Remove(edge);
-                            //        E.Add((xNew, xNear));
-                            //        break;
-                            //    }
-                            //}
                             parents[xNew] = xNear;
                         }
                     }
@@ -251,7 +241,17 @@ namespace UnityStandardAssets.Vehicles.Car
                     }
                 }
             }
-            return (V, parents);
+            Vector3 endPoint = new Vector3();
+            float costMin = Mathf.Infinity;
+            foreach (Vector3 x in XsoIn)
+            {
+                if (Vector3.Distance(x, xStart) < costMin)
+                {
+                    costMin = Vector3.Distance(x, xStart);
+                    endPoint = x;
+                }
+            }
+            return (V, parents,endPoint);
         }
 
         private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
