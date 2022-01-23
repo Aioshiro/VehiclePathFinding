@@ -30,6 +30,8 @@ namespace UnityStandardAssets.Vehicles.Car
         [Tooltip("Radius where we consider we're close enough to the goal")]
         [SerializeField] private float sphereRadius = 1.0f;
         [SerializeField] private int NumberOfIterations = 500;
+        [SerializeField] private float carLength;
+        [SerializeField] private float carHalfWidth;
 
         private void Start()
         {
@@ -250,7 +252,8 @@ namespace UnityStandardAssets.Vehicles.Car
 
         private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
         {
-            return (!Physics.Raycast(xStart, (xEnd - xStart).normalized, Vector3.Distance(xStart, xEnd), LayerMask.GetMask("Wall")));
+            //return (!Physics.Raycast(xStart, (xEnd - xStart).normalized, Vector3.Distance(xStart, xEnd), LayerMask.GetMask("Wall"))); //When the car is considered a point
+            return !Physics.CheckBox((xStart+xEnd)/2, new Vector3(carHalfWidth,1,(xEnd-xStart).magnitude/2+carLength), Quaternion.LookRotation((xEnd-xStart).normalized,Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
         }
 
         private Vector3 SamplePointInMaze()
