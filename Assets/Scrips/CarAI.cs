@@ -152,10 +152,10 @@ namespace UnityStandardAssets.Vehicles.Car
                     List<Vector3> XNear = Near(V, xNew, rTT);
                     V.Add(xNew);
                     Vector3 xMin = xNearest;
-                    float cMin = Vector3.Distance(xNearest, start_pos) + Vector3.Distance(xNearest, xNew);
+                    float cMin = Cost(xNearest) + CostLine(xNearest,xNew);
                     foreach (Vector3 xNear in XNear)
                     {
-                        float cNew = Vector3.Distance(xNear, start_pos) + Vector3.Distance(xNear, xNew);
+                        float cNew = Cost(xNear) + CostLine(xNear,xNew);
                         if (cNew < cMin && CollisionFree(xNear, xNew))
                         {
                             xMin = xNear;
@@ -165,8 +165,8 @@ namespace UnityStandardAssets.Vehicles.Car
                     parents.Add(xNew, xMin);
                     foreach (Vector3 xNear in XNear)
                     {
-                        float cNew = Vector3.Distance(xNew, start_pos) + Vector3.Distance(xNear, xNew);
-                        if (cNew < Vector3.Distance(xNear, start_pos) && CollisionFree(xNear, xNew))
+                        float cNew = Cost(xNew) + CostLine(xNear, xNew);
+                        if (cNew < Cost(xNear) && CollisionFree(xNear, xNew))
                         {
                             parents[xNew] = xNear;
                         }
@@ -198,7 +198,7 @@ namespace UnityStandardAssets.Vehicles.Car
                     List<float> costs = new List<float>();
                     foreach (Vector3 x in XsoIn)
                     {
-                        costs.Add(x.magnitude);
+                        costs.Add(Cost(x));
                     }
                     cBest = Mathf.Min(costs.ToArray());
                 }
@@ -215,10 +215,10 @@ namespace UnityStandardAssets.Vehicles.Car
                     List<Vector3> XNear = Near(V, xNew, rTT);
                     V.Add(xNew);
                     Vector3 xMin = xNearest;
-                    float cMin = Vector3.Distance(xNearest, start_pos) + Vector3.Distance(xNearest, xNew);
+                    float cMin = Cost(xNearest) + CostLine(xNearest, xNew);
                     foreach (Vector3 xNear in XNear)
                     {
-                        float cNew = Vector3.Distance(xNear, start_pos) + Vector3.Distance(xNear, xNew);
+                        float cNew = Cost(xNear) + CostLine(xNear, xNew);
                         if (cNew < cMin && CollisionFree(xNear,xNew))
                         {
                             xMin = xNear;
@@ -228,8 +228,8 @@ namespace UnityStandardAssets.Vehicles.Car
                     parents[xNew] = xMin;
                     foreach (Vector3 xNear in XNear)
                     {
-                        float cNew = Vector3.Distance(xNew, start_pos) + Vector3.Distance(xNear, xNew);
-                        if (cNew < Vector3.Distance(xNear, start_pos) &&CollisionFree(xNear,xNew))
+                        float cNew = Cost(xNew) + CostLine(xNear, xNew);
+                        if (cNew < Cost(xNear) &&CollisionFree(xNear,xNew))
                         {
                             parents[xNew] = xNear;
                         }
@@ -245,15 +245,24 @@ namespace UnityStandardAssets.Vehicles.Car
             float costMin = Mathf.Infinity;
             foreach (Vector3 x in XsoIn)
             {
-                if (Vector3.Distance(x, xStart) < costMin)
+                if (Cost(x) < costMin)
                 {
-                    costMin = Vector3.Distance(x, xStart);
+                    costMin = Cost(x);
                     endPoint = x;
                 }
             }
             return (V, parents,endPoint);
         }
 
+        private float CostLine(Vector3 xA,Vector3 xB)
+        {
+            return Vector3.Distance(xA,xB);
+        }
+
+        private float Cost(Vector3 x)
+        {
+            return Vector3.Distance(x, start_pos);
+        }
         private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
         {
             //return (!Physics.Raycast(xStart, (xEnd - xStart).normalized, Vector3.Distance(xStart, xEnd), LayerMask.GetMask("Wall"))); //When the car is considered a point
