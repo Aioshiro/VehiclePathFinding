@@ -21,6 +21,7 @@ namespace UnityStandardAssets.Vehicles.Car
         private Vector2 terrainCenter;
         private float cMin;
         private (float, float, float, float) C;
+        private Dictionary<Vector3, float> costs;
 
         [Header("Informed RTT Settings")]
         [Tooltip("Eta for Steer Function")]
@@ -51,6 +52,10 @@ namespace UnityStandardAssets.Vehicles.Car
             terrainSize = Mathf.Max(terrain_manager.myInfo.x_high - terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high - terrain_manager.myInfo.z_low)/2;
             cMin = Vector3.Distance(start_pos, goal_pos);
             C = RotationToWorldFrame(start_pos, goal_pos);
+            costs = new Dictionary<Vector3, float>
+            {
+                { start_pos, 0 }
+            };
 
             // Plot your path to see if it makes sense
             // Note that path can only be seen in "Scene" window, not "Game" window
@@ -152,10 +157,10 @@ namespace UnityStandardAssets.Vehicles.Car
                     List<Vector3> XNear = Near(V, xNew, rTT);
                     V.Add(xNew);
                     Vector3 xMin = xNearest;
-                    float cMin = Cost(xNearest) + CostLine(xNearest,xNew);
+                    float cMin = Cost(xNearest,parents) + CostLine(xNearest,xNew);
                     foreach (Vector3 xNear in XNear)
                     {
-                        float cNew = Cost(xNear) + CostLine(xNear,xNew);
+                        float cNew = Cost(xNear,parents) + CostLine(xNear,xNew);
                         if (cNew < cMin && CollisionFree(xNear, xNew))
                         {
                             xMin = xNear;
@@ -165,8 +170,8 @@ namespace UnityStandardAssets.Vehicles.Car
                     parents.Add(xNew, xMin);
                     foreach (Vector3 xNear in XNear)
                     {
-                        float cNew = Cost(xNew) + CostLine(xNear, xNew);
-                        if (cNew < Cost(xNear) && CollisionFree(xNear, xNew))
+                        float cNew = Cost(xNew,parents) + CostLine(xNear, xNew);
+                        if (cNew < Cost(xNear,parents) && CollisionFree(xNear, xNew))
                         {
                             parents[xNew] = xNear;
                         }
@@ -198,7 +203,7 @@ namespace UnityStandardAssets.Vehicles.Car
                     List<float> costs = new List<float>();
                     foreach (Vector3 x in XsoIn)
                     {
-                        costs.Add(Cost(x));
+                        costs.Add(Cost(x,parents));
                     }
                     cBest = Mathf.Min(costs.ToArray());
                 }
@@ -215,10 +220,10 @@ namespace UnityStandardAssets.Vehicles.Car
                     List<Vector3> XNear = Near(V, xNew, rTT);
                     V.Add(xNew);
                     Vector3 xMin = xNearest;
-                    float cMin = Cost(xNearest) + CostLine(xNearest, xNew);
+                    float cMin = Cost(xNearest,parents) + CostLine(xNearest, xNew);
                     foreach (Vector3 xNear in XNear)
                     {
-                        float cNew = Cost(xNear) + CostLine(xNear, xNew);
+                        float cNew = Cost(xNear,parents) + CostLine(xNear, xNew);
                         if (cNew < cMin && CollisionFree(xNear,xNew))
                         {
                             xMin = xNear;
@@ -228,8 +233,8 @@ namespace UnityStandardAssets.Vehicles.Car
                     parents[xNew] = xMin;
                     foreach (Vector3 xNear in XNear)
                     {
-                        float cNew = Cost(xNew) + CostLine(xNear, xNew);
-                        if (cNew < Cost(xNear) &&CollisionFree(xNear,xNew))
+                        float cNew = Cost(xNew,parents) + CostLine(xNear, xNew);
+                        if (cNew < Cost(xNear,parents) &&CollisionFree(xNear,xNew))
                         {
                             parents[xNew] = xNear;
                         }
@@ -245,9 +250,9 @@ namespace UnityStandardAssets.Vehicles.Car
             float costMin = Mathf.Infinity;
             foreach (Vector3 x in XsoIn)
             {
-                if (Cost(x) < costMin)
+                if (Cost(x,parents) < costMin)
                 {
-                    costMin = Cost(x);
+                    costMin = Cost(x,parents);
                     endPoint = x;
                 }
             }
@@ -259,9 +264,14 @@ namespace UnityStandardAssets.Vehicles.Car
             return Vector3.Distance(xA,xB);
         }
 
-        private float Cost(Vector3 x)
+        private float Cost(Vector3 x,Dictionary<Vector3,Vector3> parents)
         {
-            return Vector3.Distance(x, start_pos);
+            if (costs.TryGetValue(x,out float cost)){
+                return cost;
+            }
+            cost = Vector3.Distance(x, parents[x]) + Cost(parents[x], parents);
+            costs.Add(x, cost);
+            return cost;
         }
         private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
         {
@@ -286,7 +296,7 @@ namespace UnityStandardAssets.Vehicles.Car
                 float r2 = Mathf.Sqrt(cMax * cMax - cMin * cMin) / 2;
                 Vector2 xBall = UnityEngine.Random.insideUnitCircle;
                 xRand = new Vector3(C.Item1 * r1 * xBall.x + C.Item2 * r2 * xBall.y,0, C.Item3 * r1 * xBall.x + C.Item4 * r2 * xBall.y);
-                xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
+                xRand += new Vector3(start_pos.x/2+goal_pos.x/2, 0, start_pos.z / 2 + goal_pos.z / 2);
             }
             else
             {

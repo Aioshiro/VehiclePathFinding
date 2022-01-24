@@ -8345,7 +8345,7 @@ MonoBehaviour:
   eta: 2
   rTT: 1
   sphereRadius: 2
-  NumberOfIterations: 100000
+  NumberOfIterations: 20000
   carLength: 4.6
   carHalfWidth: 1.25
 --- !u!1 &1788454091
