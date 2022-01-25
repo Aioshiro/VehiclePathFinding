@@ -22,6 +22,8 @@ namespace UnityStandardAssets.Vehicles.Car
         private float cMin;
         private (float, float, float, float) C;
         private Dictionary<Vector3, float> costs;
+        [SerializeField] private Vector3 currentGoal;
+        private bool arrivedAtGoal = false;
 
         [Header("Informed RTT Settings")]
         [Tooltip("Eta for Steer Function")]
@@ -34,6 +36,11 @@ namespace UnityStandardAssets.Vehicles.Car
         [SerializeField] private float carLength;
         [SerializeField] private float carHalfWidth;
 
+        [Header("Car Movement Parameters")]
+        [Tooltip("Max distance where we considered the car passed through the point")]
+        [SerializeField] private float validatedDistance;
+
+
         private void Start()
         {
 
@@ -41,9 +48,6 @@ namespace UnityStandardAssets.Vehicles.Car
             m_Car = GetComponent<CarController>();
             terrain_manager = terrain_manager_game_object.GetComponent<TerrainManager>();
 
-            // Plan your path here
-            // Replace the code below that makes a random path
-            // ...
 
             start_pos = terrain_manager.myInfo.start_pos;
             goal_pos = terrain_manager.myInfo.goal_pos;
@@ -56,6 +60,7 @@ namespace UnityStandardAssets.Vehicles.Car
             {
                 { start_pos, 0 }
             };
+            currentGoal = new Vector3();
 
             // Plot your path to see if it makes sense
             // Note that path can only be seen in "Scene" window, not "Game" window
@@ -67,13 +72,18 @@ namespace UnityStandardAssets.Vehicles.Car
                 Debug.DrawLine(key, Graph.Item2[key], Color.red,100f,false);
             }
 
+            my_path = new List<Vector3>();
+
             //Recreating the path
             Vector3 currentPoint = Graph.Item3;
+            my_path.Add(currentPoint);
             while (Graph.Item2.TryGetValue(currentPoint, out Vector3 parent))
             {
+                my_path.Add(parent);
                 Debug.DrawLine(currentPoint, parent, Color.green, 100f, false);
                 currentPoint = parent;
             }
+            my_path.Reverse();
 
             
         }
@@ -81,31 +91,77 @@ namespace UnityStandardAssets.Vehicles.Car
 
         private void FixedUpdate()
         {
-            // Execute your path here
-            // ...
 
-            // this is how you access information about the terrain from the map
-            int i = terrain_manager.myInfo.get_i_index(transform.position.x);
-            int j = terrain_manager.myInfo.get_j_index(transform.position.z);
-            float grid_center_x = terrain_manager.myInfo.get_x_pos(i);
-            float grid_center_z = terrain_manager.myInfo.get_z_pos(j);
+            //// this is how you access information about the terrain from the map
+            //int i = terrain_manager.myInfo.get_i_index(transform.position.x);
+            //int j = terrain_manager.myInfo.get_j_index(transform.position.z);
+            //float grid_center_x = terrain_manager.myInfo.get_x_pos(i);
+            //float grid_center_z = terrain_manager.myInfo.get_z_pos(j);
 
-            Debug.DrawLine(transform.position, new Vector3(grid_center_x, 0f, grid_center_z));
+            //Debug.DrawLine(transform.position, new Vector3(grid_center_x, 0f, grid_center_z));
 
-            // this is how you access information about the terrain from a simulated laser range finder
-            RaycastHit hit;
-            float maxRange = 50f;
-            if (Physics.Raycast(transform.position + transform.up, transform.TransformDirection(Vector3.forward), out hit, maxRange))
+            //// this is how you access information about the terrain from a simulated laser range finder
+            //RaycastHit hit;
+            //float maxRange = 50f;
+            //if (Physics.Raycast(transform.position + transform.up, transform.TransformDirection(Vector3.forward), out hit, maxRange))
+            //{
+            //    Vector3 closestObstacleInFront = transform.TransformDirection(Vector3.forward) * hit.distance;
+            //    Debug.DrawRay(transform.position, closestObstacleInFront, Color.yellow);
+            //    Debug.Log("Did Hit");
+            //}
+
+
+            //// this is how you control the car
+            //m_Car.Move(1f, 1f, 1f, 0f);
+
+            UpdatePath();
+
+            float steering = ComputeSteering();
+            float accel = ComputeAccel();
+            float footBreak = ComputeFootBreak();
+            float handBreak = ComputeHandBreak();
+            m_Car.Move(steering,accel,footBreak,handBreak);
+
+        }
+
+        private void UpdatePath()
+        {
+            if (my_path.Count == 0)
             {
-                Vector3 closestObstacleInFront = transform.TransformDirection(Vector3.forward) * hit.distance;
-                Debug.DrawRay(transform.position, closestObstacleInFront, Color.yellow);
-                Debug.Log("Did Hit");
+                arrivedAtGoal = true;
+                return;
             }
+            Vector3 projectedPosition = new Vector3(this.transform.position.x, 0, transform.position.z);
+            while (Vector3.Distance(my_path[0], projectedPosition) < validatedDistance)
+            {
+                my_path.RemoveAt(0);
+            }
+            currentGoal = my_path[0];
+        }
 
+        private float ComputeSteering()
+        {
+            float  desiredAngle = Vector3.SignedAngle(transform.forward, (currentGoal - transform.position).normalized, Vector3.up);
+            return desiredAngle / m_Car.m_MaximumSteerAngle;
+        }
 
-            // this is how you control the car
-            m_Car.Move(1f, 1f, 1f, 0f);
+        private float ComputeAccel()
+        {
+            if (arrivedAtGoal)
+            {
+                return 0;
+            }
+            return 0.1f;
+        }
 
+        private float ComputeFootBreak()
+        {
+            return 0;
+        }
+
+        private float ComputeHandBreak()
+        {
+            return 0;
         }
 
         private (List<Vector3>, Dictionary<Vector3, Vector3>) RRT(int N, Vector3 xStart, Vector3 xGoal)
