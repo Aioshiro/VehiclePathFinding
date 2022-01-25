@@ -247,8 +247,10 @@ namespace UnityStandardAssets.Vehicles.Car
             Dictionary<Vector3, Vector3> parents = new Dictionary<Vector3, Vector3>();
             List<Vector3> XsoIn = new List<Vector3>();
             float cBest;
-            for (int i = 0; i < N; i++)
+            int iteration = 0;
+            while(iteration<N || (XsoIn.Count==0 && iteration<2*N))
             {
+                iteration += 1;
                 //Calculating min(costs(XsoIn)), if it's empty, return +inf
                 if (XsoIn.Count == 0)
                 {
