@@ -8343,9 +8343,9 @@ MonoBehaviour:
   - {x: 185, y: 0, z: 137}
   - {x: 124, y: 0, z: 134}
   currentGoal: {x: 0, y: 0, z: 0}
-  eta: 1
-  rTT: 1
-  sphereRadius: 3
+  steeringRadius: 1
+  neighborsRadius: 1
+  goalRadius: 3
   NumberOfIterations: 75000
   carLength: 4.6
   carHalfWidth: 1.5
