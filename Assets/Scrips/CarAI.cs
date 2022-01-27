@@ -115,13 +115,31 @@ namespace UnityStandardAssets.Vehicles.Car
             //m_Car.Move(1f, 1f, 1f, 0f);
 
             UpdatePath();
+            MoveCar();
 
-            float steering = ComputeSteering();
-            float accel = ComputeAccel();
-            float footBreak = ComputeFootBreak();
-            float handBreak = ComputeHandBreak();
-            m_Car.Move(steering,accel,footBreak,handBreak);
-
+        }
+        private void MoveCar()
+        {
+            if (arrivedAtGoal)
+            {
+                m_Car.Move(0, 0, 0, 0);
+            }
+            Vector3 projectedPosition = new Vector3(this.transform.position.x, 0, transform.position.z);
+            float accel = 0.1f;
+            float currentCarAngle = Vector3.SignedAngle(Vector3.right, transform.forward,Vector3.up);
+            float desiredCarAngle = Vector3.SignedAngle(Vector3.right, currentGoal-projectedPosition,Vector3.up);
+            //Setting the angles from [-180,180] to [0,360] for continuity
+            if (currentCarAngle < 0)
+            {
+                currentCarAngle = 360 + currentCarAngle;
+            }
+            if (desiredCarAngle < 0)
+            {
+                desiredCarAngle = 360 + desiredCarAngle;
+            }
+            float steering = Mathf.Rad2Deg * Mathf.Atan(Mathf.Deg2Rad * (desiredCarAngle - currentCarAngle) * carLength / (m_Car.CurrentSpeed * Time.deltaTime)) / m_Car.m_MaximumSteerAngle;
+            float handBreak = 0;
+            m_Car.Move(steering, accel, accel, handBreak);
         }
 
         private void UpdatePath()
@@ -139,30 +157,6 @@ namespace UnityStandardAssets.Vehicles.Car
             currentGoal = my_path[0];
         }
 
-        private float ComputeSteering()
-        {
-            float  desiredAngle = Vector3.SignedAngle(transform.forward, (currentGoal - transform.position).normalized, Vector3.up);
-            return desiredAngle / m_Car.m_MaximumSteerAngle;
-        }
-
-        private float ComputeAccel()
-        {
-            if (arrivedAtGoal)
-            {
-                return 0;
-            }
-            return 0.1f;
-        }
-
-        private float ComputeFootBreak()
-        {
-            return 0;
-        }
-
-        private float ComputeHandBreak()
-        {
-            return 0;
-        }
 
         private (List<Vector3>, Dictionary<Vector3, Vector3>) RRT(int N, Vector3 xStart, Vector3 xGoal)
         {
