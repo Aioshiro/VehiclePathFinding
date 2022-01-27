@@ -25,13 +25,13 @@ namespace UnityStandardAssets.Vehicles.Car
         [SerializeField] private Vector3 currentGoal;
         private bool arrivedAtGoal = false;
 
-        [Header("Informed RTT Settings")]
+        [Header("Informed RRT Settings")]
         [Tooltip("Eta for Steer Function")]
-        [SerializeField] private float eta = 0.1f;
+        [SerializeField] private float steeringRadius = 1f;
         [Tooltip("Radius in which we consider neighboors in the tree")]
-        [SerializeField] private float rTT = 0.1f;
+        [SerializeField] private float neighborsRadius = 1f;
         [Tooltip("Radius where we consider we're close enough to the goal")]
-        [SerializeField] private float sphereRadius = 1.0f;
+        [SerializeField] private float goalRadius = 1.0f;
         [SerializeField] private int NumberOfIterations = 500;
         [SerializeField] private float carLength;
         [SerializeField] private float carHalfWidth;
@@ -204,7 +204,7 @@ namespace UnityStandardAssets.Vehicles.Car
                 if (CollisionFree(xNearest, xNew)) 
                 {
                     // If we can go to xNearest to xNew, we add xNew to the graph and link it to the closest neighboor
-                    List<Vector3> XNear = Near(V, xNew, rTT);
+                    List<Vector3> XNear = Near(V, xNew, neighborsRadius);
                     V.Add(xNew);
                     Vector3 xMin = xNearest;
                     float cMin = Cost(xNearest,parents) + CostLine(xNearest,xNew);
@@ -269,7 +269,7 @@ namespace UnityStandardAssets.Vehicles.Car
                 if (CollisionFree(xNearest,xNew))
                 {
                     // If we can go to xNearest to xNew, we add xNew to the graph and link it to the closest neighboor
-                    List<Vector3> XNear = Near(V, xNew, rTT);
+                    List<Vector3> XNear = Near(V, xNew, neighborsRadius);
                     V.Add(xNew);
                     Vector3 xMin = xNearest;
                     float cMin = Cost(xNearest,parents) + CostLine(xNearest, xNew);
@@ -291,7 +291,7 @@ namespace UnityStandardAssets.Vehicles.Car
                             parents[xNew] = xNear;
                         }
                     }
-                    if (Physics.CheckSphere(xNew, sphereRadius, LayerMask.GetMask("Goal")))
+                    if (Physics.CheckSphere(xNew, goalRadius, LayerMask.GetMask("Goal")))
                     {
                         //If xNew in near goal, that means we found an admissible path !
                         XsoIn.Add(xNew);
@@ -392,7 +392,7 @@ namespace UnityStandardAssets.Vehicles.Car
         {
             Vector3 z = xRand - xNearest;
             z.Normalize();
-            return eta * z+xNearest;
+            return steeringRadius * z+xNearest;
         }
 
         private List<Vector3> Near(List<Vector3> V, Vector3 xNew, float rRTT)
