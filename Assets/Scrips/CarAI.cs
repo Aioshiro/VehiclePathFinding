@@ -69,7 +69,7 @@ namespace UnityStandardAssets.Vehicles.Car
             //Recreating the tree
             foreach (var key in Graph.Item2.Keys)
             {
-                Debug.DrawLine(key, Graph.Item2[key], Color.red,100f,false);
+                Debug.DrawLine(key, Graph.Item2[key], Color.red, Mathf.Infinity, false);
             }
 
             my_path = new List<Vector3>();
@@ -80,7 +80,7 @@ namespace UnityStandardAssets.Vehicles.Car
             while (Graph.Item2.TryGetValue(currentPoint, out Vector3 parent))
             {
                 my_path.Add(parent);
-                Debug.DrawLine(currentPoint, parent, Color.green, 100f, false);
+                Debug.DrawLine(currentPoint, parent, Color.green, Mathf.Infinity, false);
                 currentPoint = parent;
             }
             my_path.Reverse();
@@ -290,7 +290,7 @@ namespace UnityStandardAssets.Vehicles.Car
                         if (cNew < Cost(xNear,parents) &&CollisionFree(xNear,xNew))
                         {
                             costs[xNear] = cNew;
-                            parents[xNew] = xNear;
+                            parents[xNear] = xNew;
                         }
                     }
                     if (Physics.CheckSphere(xNew, goalRadius, LayerMask.GetMask("Goal")))

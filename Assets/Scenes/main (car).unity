@@ -810,7 +810,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed951abcb196b40f38b3699dfa82c76c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  terrain_filename: text/terrainA
+  terrain_filename: text/terrainB
   myInfo:
     file_name: 
     x_low: 0
@@ -8343,12 +8343,12 @@ MonoBehaviour:
   - {x: 185, y: 0, z: 137}
   - {x: 124, y: 0, z: 134}
   currentGoal: {x: 0, y: 0, z: 0}
-  steeringRadius: 1
-  neighborsRadius: 1
+  steeringRadius: 2
+  neighborsRadius: 2
   goalRadius: 3
   NumberOfIterations: 75000
-  carLength: 4.6
-  carHalfWidth: 1.5
+  carLength: 5
+  carHalfWidth: 2
   validatedDistance: 2
 --- !u!1 &1788454091
 GameObject:
