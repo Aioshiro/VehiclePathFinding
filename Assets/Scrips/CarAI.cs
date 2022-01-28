@@ -282,12 +282,14 @@ namespace UnityStandardAssets.Vehicles.Car
                             cMin = cNew;
                         }
                     }
+                    costs[xNew] = cMin;
                     parents[xNew] = xMin;
                     foreach (Vector3 xNear in XNear)
                     {
                         float cNew = Cost(xNew,parents) + CostLine(xNear, xNew);
                         if (cNew < Cost(xNear,parents) &&CollisionFree(xNear,xNew))
                         {
+                            costs[xNear] = cNew;
                             parents[xNew] = xNear;
                         }
                     }
