@@ -1,0 +1,21 @@
+Using pre-set license
+Built from '2020.3/staging' branch; Version is '2020.3.25f1 (9b9180224418) revision 10195328'; Using compiler version '192528614'; Build Type 'Release'
+OS: 'Windows 10  (10.0.19042) 64bit Core' Language: 'fr' Physical Memory: 8075 MB
+BatchMode: 1, IsHumanControllingUs: 0, StartBugReporterOnCrash: 0, Is64bit: 1, IsPro: 0
+
+COMMAND LINE ARGUMENTS:
+D:\Program Files\Unity\2020.3.25f1\Editor\Unity.exe
+-adb2
+-batchMode
+-noUpm
+-name
+AssetImportWorker2
+-projectPath
+D:/Bureau/kth/Artificial Intelligence and Multi-agents Systems/Assignment_1
+-logFile
+Logs/AssetImportWorker2.log
+-srvPort
+49232
+Successfully changed project path to: D:/Bureau/kth/Artificial Intelligence and Multi-agents Systems/Assignment_1
+D:/Bureau/kth/Artificial Intelligence and Multi-agents Systems/Assignment_1
+Using Asset Import Pipeline V2.

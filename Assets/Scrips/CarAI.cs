@@ -13,7 +13,7 @@ namespace UnityStandardAssets.Vehicles.Car
         public GameObject terrain_manager_game_object;
         TerrainManager terrain_manager;
 
-        [SerializeField] private List<Vector3> my_path;
+        [SerializeField] private List<(Vector3, float, float)> my_path;
 
         private Vector3 start_pos;
         private Vector3 goal_pos;
@@ -21,9 +21,9 @@ namespace UnityStandardAssets.Vehicles.Car
         private Vector2 terrainCenter;
         private float cMin;
         private (float, float, float, float) C;
-        private Dictionary<Vector3, float> costs;
-        [SerializeField] private Vector3 currentGoal;
+        private Dictionary<(Vector3, float, float), float> costs;
         private bool arrivedAtGoal = false;
+        private int goalIndex = 0;
 
         [Header("Informed RRT Settings")]
         [Tooltip("Eta for Steer Function")]
@@ -56,36 +56,33 @@ namespace UnityStandardAssets.Vehicles.Car
             terrainSize = Mathf.Max(terrain_manager.myInfo.x_high - terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high - terrain_manager.myInfo.z_low)/2;
             cMin = Vector3.Distance(start_pos, goal_pos);
             C = RotationToWorldFrame(start_pos, goal_pos);
-            costs = new Dictionary<Vector3, float>
-            {
-                { start_pos, 0 }
-            };
-            currentGoal = new Vector3();
+            costs = new Dictionary<(Vector3, float, float), float>();
+
 
             // Plot your path to see if it makes sense
             // Note that path can only be seen in "Scene" window, not "Game" window
-            (List<Vector3>, Dictionary<Vector3, Vector3>,Vector3) Graph = InformedRRTStar(NumberOfIterations, start_pos, goal_pos);
+            (List<(Vector3, float, float)>, Dictionary<(Vector3, float, float), (Vector3, float, float)>, (Vector3, float, float)) Graph = RRT(NumberOfIterations, start_pos, goal_pos);
 
             //Recreating the tree
             foreach (var key in Graph.Item2.Keys)
             {
-                Debug.DrawLine(key, Graph.Item2[key], Color.red,100f,false);
+                Debug.DrawLine(key.Item1, Graph.Item2[key].Item1, Color.red,100f,false);
             }
 
-            my_path = new List<Vector3>();
+            my_path = new List<(Vector3, float, float)>();
 
             //Recreating the path
-            Vector3 currentPoint = Graph.Item3;
+            (Vector3, float, float) currentPoint = Graph.Item3;
             my_path.Add(currentPoint);
-            while (Graph.Item2.TryGetValue(currentPoint, out Vector3 parent))
+            while (Graph.Item2.TryGetValue(currentPoint, out (Vector3, float, float) parent))
             {
                 my_path.Add(parent);
-                Debug.DrawLine(currentPoint, parent, Color.green, 100f, false);
+                Debug.DrawLine(currentPoint.Item1, parent.Item1, Color.green, 100f, false);
                 currentPoint = parent;
             }
             my_path.Reverse();
+            goalIndex = 0;
 
-            
         }
 
 
@@ -110,12 +107,12 @@ namespace UnityStandardAssets.Vehicles.Car
             //    Debug.Log("Did Hit");
             //}
 
-
             //// this is how you control the car
             //m_Car.Move(1f, 1f, 1f, 0f);
-
-            UpdatePath();
-            MoveCar();
+            if (my_path.Count < goalIndex)
+            {
+                MoveCar();
+            }
 
         }
         private void MoveCar()
@@ -124,191 +121,103 @@ namespace UnityStandardAssets.Vehicles.Car
             {
                 m_Car.Move(0, 0, 0, 0);
             }
-            Vector3 projectedPosition = new Vector3(this.transform.position.x, 0, transform.position.z);
-            float accel = 0.1f;
-            float currentCarAngle = Vector3.SignedAngle(Vector3.right, transform.forward,Vector3.up);
-            float desiredCarAngle = Vector3.SignedAngle(Vector3.right, currentGoal-projectedPosition,Vector3.up);
-            //Setting the angles from [-180,180] to [0,360] for continuity
-            if (currentCarAngle < 0)
-            {
-                currentCarAngle = 360 + currentCarAngle;
-            }
-            if (desiredCarAngle < 0)
-            {
-                desiredCarAngle = 360 + desiredCarAngle;
-            }
-            float steering = Mathf.Rad2Deg * Mathf.Atan(Mathf.Deg2Rad * (desiredCarAngle - currentCarAngle) * carLength / (m_Car.CurrentSpeed * Time.deltaTime)) / m_Car.m_MaximumSteerAngle;
-            float handBreak = 0;
-            m_Car.Move(steering, accel, accel, handBreak);
-        }
-
-        private void UpdatePath()
-        {
-            if (my_path.Count == 0)
-            {
-                arrivedAtGoal = true;
-                return;
-            }
-            Vector3 projectedPosition = new Vector3(this.transform.position.x, 0, transform.position.z);
-            while (Vector3.Distance(my_path[0], projectedPosition) < validatedDistance)
-            {
-                my_path.RemoveAt(0);
-            }
-            currentGoal = my_path[0];
+            (Vector3 oldPos, float speed, float angle) = my_path[goalIndex];
+            (Vector3 goal, float newSpeed, float newAngle) = my_path[goalIndex + 1];
+            goalIndex += 1;
+            float steering = Mathf.Rad2Deg*Mathf.Atan((newAngle - angle) * carLength / (newSpeed * Time.fixedDeltaTime))/m_Car.m_MaximumSteerAngle;
+            float accel = (newSpeed - speed)/Time.fixedDeltaTime;
+            m_Car.Move(steering, accel, accel, 0.0f);
         }
 
 
-        private (List<Vector3>, Dictionary<Vector3, Vector3>) RRT(int N, Vector3 xStart, Vector3 xGoal)
+
+        private (List<(Vector3,float,float)>, Dictionary<(Vector3, float, float), (Vector3, float, float)>, (Vector3,float,float)) RRT(int N, Vector3 xStart, Vector3 xGoal)
         {
             ///Initializating graph
-            List<Vector3> V = new List<Vector3>
+            List<(Vector3, float, float)> V = new List<(Vector3, float, float)>
             {
-                xStart
+                (xStart,0,90)
             };
-            Dictionary<Vector3, Vector3> parents = new Dictionary<Vector3, Vector3>();
-
-            for (int i = 0; i < N; i++)
+            costs.Add((xStart, 0, 90), 0);
+            Dictionary<(Vector3, float, float), (Vector3, float, float)> parents = new Dictionary<(Vector3, float, float), (Vector3, float, float)>();
+            bool foundPath = false;
+            int i = 0;
+            float timeStep = Time.fixedDeltaTime;
+            (Vector3,float,float) finalPoint = (new Vector3(), new float(), new float());
+            while (i<N && !foundPath)
             {
+                i += 1;
                 //Sampling random pos in the maze
                 Vector3 xRand = SamplePointInMaze();
                 //Finding nearest point of xRand in the graph
-                Vector3 xNearest = Nearest(V, xRand);
+                (Vector3, float, float) xNearest = Nearest(V, xRand);
+                (float accel, float steering) = SelectInput(xNearest, xRand);
                 //Creating new Point between xNearest and xRand but close to xNearest
-                Vector3 xNew = Steer(xNearest, xRand);
-                if (CollisionFree(xNearest, xNew)) // If we can go to xNearest to xNew, we add xNew to the graph
+                (Vector3,float,float) xNew = NewState(xNearest, accel,steering,timeStep);
+                if (CollisionFree(xNearest.Item1, xNew.Item1)) // If we can go to xNearest to xNew, we add xNew to the graph
                 {
+                    List<(Vector3, float, float)> XNear = Near(V, xNew, neighborsRadius);
                     V.Add(xNew);
-                    parents.Add(xNew, xNearest);
-                }
-            }
-            return (V, parents);
-        }
-
-        private (List<Vector3>, Dictionary<Vector3, Vector3>) RRTStar(int N, Vector3 xStart, Vector3 xGoal)
-        {
-            ///Initializating graph
-            List<Vector3> V = new List<Vector3>
-            {
-                xStart
-            };
-            Dictionary<Vector3, Vector3> parents = new Dictionary<Vector3, Vector3>();
-            for (int i = 0; i < N; i++)
-            {
-                //Sampling random pos in the maze
-                Vector3 xRand = SamplePointInMaze();
-                //Finding nearest point of xRand in the graph
-                Vector3 xNearest = Nearest(V, xRand);
-                //Creating new Point between xNearest and xRand but close to xNearest
-                Vector3 xNew = Steer(xNearest, xRand);
-
-                if (CollisionFree(xNearest, xNew)) 
-                {
-                    // If we can go to xNearest to xNew, we add xNew to the graph and link it to the closest neighboor
-                    List<Vector3> XNear = Near(V, xNew, neighborsRadius);
-                    V.Add(xNew);
-                    Vector3 xMin = xNearest;
-                    float cMin = Cost(xNearest,parents) + CostLine(xNearest,xNew);
-                    foreach (Vector3 xNear in XNear)
+                    (Vector3, float, float) xMin = xNearest;
+                    float cMin = Cost(xNearest,parents) + CostLine(xNearest.Item1, xNew.Item1);
+                    foreach (var xNear in XNear)
                     {
-                        float cNew = Cost(xNear,parents) + CostLine(xNear,xNew);
-                        if (cNew < cMin && CollisionFree(xNear, xNew))
+                        if (CollisionFree(xNear.Item1, xNew.Item1)&& Cost(xNear,parents)+CostLine(xNear.Item1, xNew.Item1)< cMin)
                         {
                             xMin = xNear;
-                            cMin = cNew;
+                            cMin = Cost(xNear, parents) + CostLine(xNear.Item1, xNew.Item1);
                         }
                     }
                     parents.Add(xNew, xMin);
-                    foreach (Vector3 xNear in XNear)
+                    foreach (var xNear in XNear)
                     {
-                        float cNew = Cost(xNew,parents) + CostLine(xNear, xNew);
-                        if (cNew < Cost(xNear,parents) && CollisionFree(xNear, xNew))
-                        {
-                            parents[xNew] = xNear;
+                        if (CollisionFree(xNear.Item1, xNew.Item1) && Cost(xNew, parents) + CostLine(xNear.Item1, xNew.Item1) < Cost(xNear, parents)){
+                            parents[xNear] = xNew;
                         }
                     }
-                }
-            }
-            return (V, parents);
-        }
-
-        private (List<Vector3>, Dictionary<Vector3, Vector3>,Vector3) InformedRRTStar(int N, Vector3 xStart, Vector3 xGoal)
-        {
-            ///Initializating variables
-            List<Vector3> V = new List<Vector3>
-            {
-                xStart
-            };
-            Dictionary<Vector3, Vector3> parents = new Dictionary<Vector3, Vector3>();
-            List<Vector3> XsoIn = new List<Vector3>();
-            float cBest;
-            int iteration = 0;
-            while(iteration<N || (XsoIn.Count==0 && iteration<2*N))
-            {
-                iteration += 1;
-                //Calculating min(costs(XsoIn)), if it's empty, return +inf
-                if (XsoIn.Count == 0)
-                {
-                    cBest = Mathf.Infinity;
-                }
-                else
-                {
-                    List<float> costs = new List<float>();
-                    foreach (Vector3 x in XsoIn)
-                    {
-                        costs.Add(Cost(x,parents));
-                    }
-                    cBest = Mathf.Min(costs.ToArray());
-                }
-                //Sampling random pos in the maze
-                Vector3 xRand = Sample(cBest);
-                //Finding nearest point of xRand in the graph
-                Vector3 xNearest = Nearest(V, xRand);
-                //Creating new Point between xNearest and xRand but close to xNearest
-                Vector3 xNew = Steer(xNearest, xRand);
-
-                if (CollisionFree(xNearest,xNew))
-                {
-                    // If we can go to xNearest to xNew, we add xNew to the graph and link it to the closest neighboor
-                    List<Vector3> XNear = Near(V, xNew, neighborsRadius);
-                    V.Add(xNew);
-                    Vector3 xMin = xNearest;
-                    float cMin = Cost(xNearest,parents) + CostLine(xNearest, xNew);
-                    foreach (Vector3 xNear in XNear)
-                    {
-                        float cNew = Cost(xNear,parents) + CostLine(xNear, xNew);
-                        if (cNew < cMin && CollisionFree(xNear,xNew))
-                        {
-                            xMin = xNear;
-                            cMin = cNew;
-                        }
-                    }
-                    parents[xNew] = xMin;
-                    foreach (Vector3 xNear in XNear)
-                    {
-                        float cNew = Cost(xNew,parents) + CostLine(xNear, xNew);
-                        if (cNew < Cost(xNear,parents) &&CollisionFree(xNear,xNew))
-                        {
-                            parents[xNew] = xNear;
-                        }
-                    }
-                    if (Physics.CheckSphere(xNew, goalRadius, LayerMask.GetMask("Goal")))
+                    if (Physics.CheckSphere(xNew.Item1, goalRadius, LayerMask.GetMask("Goal")))
                     {
                         //If xNew in near goal, that means we found an admissible path !
-                        XsoIn.Add(xNew);
+                        foundPath = true;
+                        finalPoint = xNew;
                     }
                 }
             }
-            Vector3 endPoint = new Vector3();
-            float costMin = Mathf.Infinity;
-            foreach (Vector3 x in XsoIn)
-            {
-                if (Cost(x,parents) < costMin)
-                {
-                    costMin = Cost(x,parents);
-                    endPoint = x;
-                }
-            }
-            return (V, parents,endPoint);
+            return (V, parents,finalPoint);
+        }
+
+        //private (float,float) SelectInput(Vector3 xNear,Vector3 xRand)
+        //{
+        //    float accel = (0.1f-properties[xNear].Item1)/Time.fixedDeltaTime;
+        //    float currentCarAngle = properties[xNear].Item2;
+        //    float desiredCarAngle = Vector3.SignedAngle(Vector3.right, xRand - xNear, Vector3.up);
+        //    //Setting the angles from [-180,180] to [0,360] for continuity
+        //    if (currentCarAngle < 0)
+        //    {
+        //        currentCarAngle = 360 + currentCarAngle;
+        //    }
+        //    if (desiredCarAngle < 0)
+        //    {
+        //        desiredCarAngle = 360 + desiredCarAngle;
+        //    }
+        //    float steering = Mathf.Rad2Deg * Mathf.Atan(Mathf.Deg2Rad * (desiredCarAngle - currentCarAngle) * carLength / (properties[xNear].Item1 * Time.fixedDeltaTime)) / m_Car.m_MaximumSteerAngle;
+        //    properties.Add(xRand, (accel, steering));
+        //    return (accel,steering);
+        //}
+        private (float, float) SelectInput((Vector3, float, float) xNear, Vector3 xRand)
+        {
+            return (2*UnityEngine.Random.value-1, UnityEngine.Random.value);
+        }
+
+
+        private (Vector3,float,float) NewState((Vector3, float, float) xNearest,float accel, float steering,float timeStep)
+        {
+            float speed = xNearest.Item2;
+            float angle = xNearest.Item3;
+            float newAngle = angle + speed * timeStep * Mathf.Tan(steering * m_Car.m_MaximumSteerAngle) / carLength;
+            float newSpeed = speed + accel * timeStep;
+            Vector3 newPos = new Vector3(xNearest.Item1.x + timeStep * newSpeed * Mathf.Cos(newAngle), 0, xNearest.Item1.z + timeStep* newSpeed * Mathf.Sin(newAngle));
+            return (newPos,newSpeed,newAngle);
         }
 
         private float CostLine(Vector3 xA,Vector3 xB)
@@ -316,12 +225,16 @@ namespace UnityStandardAssets.Vehicles.Car
             return Vector3.Distance(xA,xB);
         }
 
-        private float Cost(Vector3 x,Dictionary<Vector3,Vector3> parents)
+        private float Cost((Vector3,float,float) x,Dictionary<(Vector3,float,float),(Vector3,float,float)> parents)
         {
+            Debug.Log(x);
             if (costs.TryGetValue(x,out float cost)){
                 return cost;
             }
-            cost = Vector3.Distance(x, parents[x]) + Cost(parents[x], parents);
+            if (parents.TryGetValue(x, out var parent))
+            {
+                cost = Vector3.Distance(x.Item1, parent.Item1) + Cost(parent, parents);
+            }
             costs.Add(x, cost);
             return cost;
         }
@@ -372,13 +285,13 @@ namespace UnityStandardAssets.Vehicles.Car
 
         }
 
-        private Vector3 Nearest(List<Vector3> V,Vector3 xRand)
+        private (Vector3, float, float) Nearest(List<(Vector3,float,float)> V,Vector3 xRand)
         {
-            Vector3 xMin = new Vector3();
+            (Vector3, float, float) xMin = (new Vector3(), new float(), new float());
             float minDist = Mathf.Infinity;
-            foreach (Vector3 x in V)
+            foreach ((Vector3,float,float) x in V)
             {
-                float temp = Vector3.Distance(x, xRand);
+                float temp = Vector3.Distance(x.Item1, xRand);
                 if (temp < minDist)
                 {
                     minDist = temp;
@@ -395,12 +308,12 @@ namespace UnityStandardAssets.Vehicles.Car
             return steeringRadius * z+xNearest;
         }
 
-        private List<Vector3> Near(List<Vector3> V, Vector3 xNew, float rRTT)
+        private List<(Vector3,float,float)> Near(List<(Vector3,float,float)> V, (Vector3,float,float) xNew, float rRTT)
         {
-            List<Vector3> XNear = new List<Vector3>();
-            foreach (Vector3 x in V)
+            List<(Vector3,float,float)> XNear = new List<(Vector3,float,float)>();
+            foreach ((Vector3,float,float) x in V)
             {
-                if (Vector3.Distance(x, xNew) < rRTT)
+                if (Vector3.Distance(x.Item1, xNew.Item1) < rRTT)
                 {
                     XNear.Add(x);
                 }
