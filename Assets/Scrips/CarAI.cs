@@ -25,7 +25,7 @@ namespace UnityStandardAssets.Vehicles.Car
         private bool arrivedAtGoal = false;
         [SerializeField] private float validationDistance = 1.0f;
         [Tooltip("Radius where we consider we're close enough to the goal")]
-        [SerializeField] private float goalRadius = 1.0f;
+        private float goalRadius;
         [SerializeField] private int numberOfIterations = 500;
         [SerializeField] private float carLength;
         [SerializeField] private float carHalfWidth;
@@ -81,7 +81,7 @@ namespace UnityStandardAssets.Vehicles.Car
 
             // Plot your path to see if it makes sense
             // Note that path can only be seen in "Scene" window, not "Game" window
-            State finalPoint = RRT(start_pos, new Vector3(150,0,175));
+            State finalPoint = RRT(start_pos, goal_pos);
 
             ShowTree(root);
             ShowingTreeAndPath(finalPoint);
@@ -123,6 +123,7 @@ namespace UnityStandardAssets.Vehicles.Car
             terrainCenter = new Vector2(terrain_manager.myInfo.x_high + terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high + terrain_manager.myInfo.z_low);
             terrainCenter /= 2;
             terrainSize = Mathf.Max(terrain_manager.myInfo.x_high - terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high - terrain_manager.myInfo.z_low) / 2;
+            goalRadius = FindObjectOfType<GameManager>().goal_tolerance;
 
             //Relative to RRT
             fixedDeltaTime = Time.fixedDeltaTime;
@@ -138,36 +139,51 @@ namespace UnityStandardAssets.Vehicles.Car
 
         private void FixedUpdate()
         {
-            if (my_path.Count > 0)
-            {
-                MoveCar();
-            }
+
+            UpdatePath();
+            MoveCar();
 
         }
+
         private void MoveCar()
         {
             if (arrivedAtGoal)
             {
                 m_Car.Move(0, 0, 0, 0);
             }
-            Vector3 projectionPosition = new Vector3(transform.position.x, 0, transform.position.z);
-            while(Vector3.Distance(my_path[0].pos, projectionPosition) < validationDistance)
+            Vector3 projectedPosition = new Vector3(this.transform.position.x, 0, transform.position.z);
+            float accel = 0.4f;
+            float currentCarAngle = Vector3.SignedAngle(Vector3.right, transform.forward, Vector3.up);
+            float desiredCarAngle = Vector3.SignedAngle(Vector3.right, currentGoal.pos - projectedPosition, Vector3.up);
+            //Setting the angles from [-180,180] to [0,360] for continuity
+            if (currentCarAngle < 0)
+            {
+                currentCarAngle = 360 + currentCarAngle;
+            }
+            if (desiredCarAngle < 0)
+            {
+                desiredCarAngle = 360 + desiredCarAngle;
+            }
+            float steering = Mathf.Rad2Deg * Mathf.Atan(Mathf.Deg2Rad * (desiredCarAngle - currentCarAngle) * carLength / (m_Car.CurrentSpeed * Time.deltaTime)) / m_Car.m_MaximumSteerAngle;
+            float handBreak = 0;
+            m_Car.Move(steering, accel, accel, handBreak);
+        }
+
+        private void UpdatePath()
+        {
+            if (my_path.Count == 0)
+            {
+                arrivedAtGoal = true;
+                return;
+            }
+            Vector3 projectedPosition = new Vector3(this.transform.position.x, 0, transform.position.z);
+            while (Vector3.Distance(my_path[0].pos, projectedPosition) < validationDistance)
             {
                 my_path.RemoveAt(0);
             }
             currentGoal = my_path[0];
             currentGoalPos = currentGoal.pos;
-            float accel = (currentGoal.currentSpeed - m_Car.CurrentSpeed) / fixedDeltaTime;
-            float currentAngle = Vector3.SignedAngle(Vector3.right, Vector3.forward,Vector3.up)*Mathf.Deg2Rad;
-            if (currentAngle < 0)
-            {
-                currentAngle += 2 * Mathf.PI;
-            }
-            float steering = Mathf.Rad2Deg*Mathf.Atan((currentGoal.currentAngle-currentAngle) * carLength / (m_Car.CurrentSpeed * fixedDeltaTime))/m_Car.m_MaximumSteerAngle;
-            m_Car.Move(steering, accel, accel, 0);
         }
-
-
 
 
 
@@ -222,7 +238,11 @@ namespace UnityStandardAssets.Vehicles.Car
         private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
         {
             //return (!Physics.Raycast(xStart, (xEnd - xStart).normalized, Vector3.Distance(xStart, xEnd), LayerMask.GetMask("Wall"))); //When the car is considered a point
-            return !Physics.CheckBox((xStart+xEnd)/2, new Vector3(carHalfWidth,1,(xEnd-xStart).magnitude/2+carLength), Quaternion.LookRotation((xEnd-xStart).normalized,Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
+            if ((xEnd - xStart).magnitude > carLength)
+            {
+                return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(carHalfWidth, 1, (xEnd - xStart).magnitude / 2 + carLength), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
+            }
+            return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(carHalfWidth, 1, carLength/2), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall"));
         }
 
         private Vector3 SamplePointInMaze()
@@ -255,7 +275,7 @@ namespace UnityStandardAssets.Vehicles.Car
             //float bestAngle = 0;
             State finalState = new State(Vector3.zero, 0, 0, 0, 0);
             for (float steering=-1; steering<=1;steering+=0.1f){
-                for (float accel = 0;accel <=0.5;accel += 0.1f)
+                for (float accel = 0;accel <=1;accel += 0.1f)
                 {
                     State newState = NewState(xNearest, accel, steering, fixedDeltaTime);
                     float newDistance = Vector3.Distance(newState.pos, xRand);
