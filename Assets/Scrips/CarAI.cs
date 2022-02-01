@@ -30,45 +30,12 @@ namespace UnityStandardAssets.Vehicles.Car
         [SerializeField] private float carLength;
         [SerializeField] private float carHalfWidth;
         private State currentGoal = new State(Vector3.zero,0,0,0,0);
-        public Vector3 currentGoalPos;
-        private List<State> V;
-        private State root;
-
-        private class State
-        {
-            public Vector3 pos;
-            private float _cost;
-            public float currentSpeed;
-            public float currentAngle;
-            public float accelFromLastState;
-            public float steeringFromLastState;
-            public State parent;
-            public List<State> children;
-
-            public State(Vector3 pos,float currentSpeed,float currentAngle, float accelFromLastState, float steeringFromLastState)
-            {
-                this.pos = pos;
-                this._cost = -1;
-                this.currentSpeed = currentSpeed;
-                this.currentAngle = currentAngle;
-                this.accelFromLastState = accelFromLastState;
-                this.steeringFromLastState = steeringFromLastState;
-                this.parent = null;
-                this.children = new List<State>();
-            }
-
-            public float Cost()
-            {
-                if (this._cost != -1)
-                {
-                    return this._cost;
-                }
-                float cost = parent.Cost() + Vector3.Distance(this.pos, parent.pos);
-                this._cost = cost;
-                return cost;
-            }
-        }
-
+        public GameObject currentGoalPos;
+        private State rootStart;
+        private State rootGoal;
+        private KdTree kdTreeStart;
+        private KdTree kdTreeGoal;
+        [SerializeField] private float maxAccel = 0.4f;
 
 
         private void Start()
@@ -81,17 +48,18 @@ namespace UnityStandardAssets.Vehicles.Car
 
             // Plot your path to see if it makes sense
             // Note that path can only be seen in "Scene" window, not "Game" window
-            State finalPoint = RRT(start_pos, goal_pos);
+            (State,State) meetingPoints = RRT(start_pos, goal_pos);
 
-            ShowTree(root);
-            ShowingTreeAndPath(finalPoint);
+            ShowTree(rootStart,Color.red);
+            ShowTree(rootGoal,Color.blue);
+            ShowingTreeAndPath(meetingPoints);
 
         }
 
-        private void ShowingTreeAndPath(State finalState)
+        private void ShowingTreeAndPath((State,State) finalStates)
         {
             //Recreating the path
-            State currentState = finalState;
+            State currentState = finalStates.Item1;
             my_path.Add(currentState);
             while (!(currentState.parent is null))
             {
@@ -100,16 +68,24 @@ namespace UnityStandardAssets.Vehicles.Car
                 currentState= currentState.parent;
             }
             my_path.Reverse();
+            currentState = finalStates.Item2;
+            my_path.Add(currentState);
+            while (!(currentState.parent is null))
+            {
+                my_path.Add(currentState.parent);
+                Debug.DrawLine(currentState.pos, currentState.parent.pos, Color.green, Mathf.Infinity, false);
+                currentState = currentState.parent;
+            }
         }
 
-        private void ShowTree(State currentState)
+        private void ShowTree(State currentState,Color color)
         {
             if (currentState.children.Count != 0)
             {
                 foreach( State child in currentState.children)
                 {
-                    Debug.DrawLine(currentState.pos, child.pos, Color.red, Mathf.Infinity, false);
-                    ShowTree(child);
+                    Debug.DrawLine(currentState.pos, child.pos, color, Mathf.Infinity, false);
+                    ShowTree(child,color);
                 }
             }
         }
@@ -127,12 +103,36 @@ namespace UnityStandardAssets.Vehicles.Car
 
             //Relative to RRT
             fixedDeltaTime = Time.fixedDeltaTime;
-            root = new State(start_pos, 0, Mathf.Deg2Rad * 90, 0, 0);
-
-            V = new List<State>
+            rootStart = new State(start_pos, 0, Mathf.Deg2Rad * 90, 0, 0);
+            //Finding the orientation of the goal
+            float maxDistance = -Mathf.Infinity;
+            float angle = 0;
+            for (int i = 0; i< 4;i++)
             {
-                root
+                if (Physics.Raycast(goal_pos,new Vector3(Mathf.Cos(Mathf.PI/2*i),0, Mathf.Sin(Mathf.PI / 2 * i)), out RaycastHit hit, LayerMask.GetMask("Wall")))
+                {
+                    if (hit.distance > maxDistance)
+                    {
+                        maxDistance = hit.distance;
+                        angle = Mathf.PI / 2 * i;
+                    }
+                }
+                else
+                {
+                    maxDistance = Mathf.Infinity;
+                    angle = Mathf.PI / 2 * i;
+                }
+            }
+            rootGoal = new State(goal_pos, 0,angle, 0, 0);
+            kdTreeStart = new KdTree(true)
+            {
+                rootStart
             };
+            kdTreeGoal = new KdTree(true)
+            {
+                rootGoal
+            };
+
             my_path = new List<State>();
 
         }
@@ -149,10 +149,13 @@ namespace UnityStandardAssets.Vehicles.Car
         {
             if (arrivedAtGoal)
             {
-                m_Car.Move(0, 0, 0, 0);
+                m_Car.Move(0, 1, 1, 0);
             }
             Vector3 projectedPosition = new Vector3(this.transform.position.x, 0, transform.position.z);
-            float accel = 0.4f;
+            Vector3 averageTwoNextGoals = (my_path[0].pos + my_path[1].pos+ my_path[2].pos) / 3;
+            float angle = Vector3.Angle(currentGoal.pos, averageTwoNextGoals);
+            float accel = maxAccel* (45-angle)/45;
+
             float currentCarAngle = Vector3.SignedAngle(Vector3.right, transform.forward, Vector3.up);
             float desiredCarAngle = Vector3.SignedAngle(Vector3.right, currentGoal.pos - projectedPosition, Vector3.up);
             //Setting the angles from [-180,180] to [0,360] for continuity
@@ -182,41 +185,97 @@ namespace UnityStandardAssets.Vehicles.Car
                 my_path.RemoveAt(0);
             }
             currentGoal = my_path[0];
-            currentGoalPos = currentGoal.pos;
+            currentGoalPos.transform.position = currentGoal.pos;
         }
 
 
 
-        private State RRT(Vector3 xStart, Vector3 xGoal)
+        //private State RRT(Vector3 xStart, Vector3 xGoal)
+        //{
+        //    ///Initializating graph
+        //    bool foundPath = false;
+        //    int i = 0;
+        //    State finalPoint = new State(Vector3.zero, 0, 0, 0, 0);
+        //    while (i<numberOfIterations && !foundPath)
+        //    {
+        //        i += 1;
+        //        //Sampling random pos in the maze
+        //        Vector3 xRand = SamplePointInMaze();
+        //        //Finding nearest point of xRand in the graph
+        //        State xNearest = Nearest(V, xRand);
+        //        State newState = Steer(xNearest, xRand);
+        //        if (CollisionFree(xNearest.pos, newState.pos)) // If we can go to xNearest to xNew, we add xNew to the graph
+        //        {
+        //            V.Add(newState);
+        //            kdTree.Add(newState);
+        //            newState.parent = xNearest;
+        //            xNearest.children.Add(newState);
+        //            if (Vector3.Distance(newState.pos,xGoal)<goalRadius)
+        //            {
+        //                //If xNew in near goal, that means we found an admissible path !
+        //                foundPath = true;
+        //                finalPoint = newState;
+        //            }
+                    
+        //        }
+                
+        //    }
+        //    return finalPoint;
+        //}
+
+        private (State,State) RRT(Vector3 xStart, Vector3 xGoal)
         {
-            ///Initializating graph
-            bool foundPath = false;
             int i = 0;
-            State finalPoint = new State(Vector3.zero, 0, 0, 0, 0);
-            while (i<numberOfIterations && !foundPath)
+            while (i < numberOfIterations)
             {
                 i += 1;
-                //Sampling random pos in the maze
-                Vector3 xRand = SamplePointInMaze();
-                //Finding nearest point of xRand in the graph
-                State xNearest = Nearest(V, xRand);
-                State newState = Steer(xNearest, xRand);
-                if (CollisionFree(xNearest.pos, newState.pos)) // If we can go to xNearest to xNew, we add xNew to the graph
+                State xNew = Extend(rootStart, true);
+                if (!(xNew is null) && Connect(xNew, out State otherTreeState, false))
                 {
-                    V.Add(newState);
-                    newState.parent = xNearest;
-                    xNearest.children.Add(newState);
-                    if (Vector3.Distance(newState.pos,xGoal)<goalRadius)
-                    {
-                        //If xNew in near goal, that means we found an admissible path !
-                        foundPath = true;
-                        finalPoint = newState;
-                    }
-                    
+                    return (xNew, otherTreeState);
                 }
-                
+                xNew = Extend(rootGoal, false);
+                if (!(xNew is null) && Connect(xNew, out otherTreeState, true))
+                {
+                    return (otherTreeState, xNew);
+                }
+
             }
-            return finalPoint;
+            return (null,null);
+        }
+
+        private State Extend(State treeRoot,bool startTree)
+        {
+            //Sampling random pos in the maze
+            Vector3 xRand = SamplePointInMaze(startTree);
+            //Finding nearest point of xRand in the graph
+            State xNearest = Nearest(xRand,startTree);
+            State newState = Steer(xNearest, xRand);
+            if (CollisionFree(xNearest.pos, newState.pos)) // If we can go to xNearest to xNew, we add xNew to the graph
+            {
+                if (startTree)
+                {
+                    kdTreeStart.Add(newState);
+                }
+                else
+                {
+                    kdTreeGoal.Add(newState);
+                }
+                newState.parent = xNearest;
+                xNearest.children.Add(newState);
+                return newState;
+            }
+            return null;
+        }
+
+        private bool Connect(State xNew, out State otherTreeState,bool isStartTree)
+        {
+            otherTreeState = Nearest(xNew.pos, isStartTree);
+            if (Vector3.Distance(otherTreeState.pos, xNew.pos) < validationDistance/2)
+            {
+                return true;
+            }
+            return false;
         }
 
         private State NewState(State xNearest, float accel, float steering, float timeStep)
@@ -238,35 +297,45 @@ namespace UnityStandardAssets.Vehicles.Car
         private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
         {
             //return (!Physics.Raycast(xStart, (xEnd - xStart).normalized, Vector3.Distance(xStart, xEnd), LayerMask.GetMask("Wall"))); //When the car is considered a point
-            if ((xEnd - xStart).magnitude > carLength)
-            {
-                return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(carHalfWidth, 1, (xEnd - xStart).magnitude / 2 + carLength), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
-            }
-            return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(carHalfWidth, 1, carLength/2), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall"));
+            return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(carHalfWidth, 1, (xEnd - xStart).magnitude / 2 + carLength), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
+            //return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(carHalfWidth, 1, carLength/2), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
         }
 
-        private Vector3 SamplePointInMaze()
+        private Vector3 SamplePointInMaze(bool isStartTree)
         {
-            Vector3 xRand = new Vector3(2 * UnityEngine.Random.value - 1, 0, 2 * UnityEngine.Random.value - 1);
-            xRand *= terrainSize; //Sampling random pos in the maze
-            xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
-            return xRand;
+            if (UnityEngine.Random.value <= 0.99)
+            {
+                Vector3 xRand = new Vector3(2 * UnityEngine.Random.value - 1, 0, 2 * UnityEngine.Random.value - 1);
+                xRand *= terrainSize; //Sampling random pos in the maze
+                xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
+                return xRand;
+            }
+            if (isStartTree)
+            {
+                return goal_pos; // sampling the goal 1% of the time to help convergence
+            }
+            return start_pos;
         }
 
-        private State Nearest(List<State> V,Vector3 xRand)
+        private State Nearest(Vector3 xRand,bool isStartTree)
         {
-            State xMin = new State(Vector3.zero, 0, 0, 0, 0);
-            float minDist = Mathf.Infinity;
-            foreach (State x in V)
+            //State xMin = new State(Vector3.zero, 0, 0, 0, 0);
+            //float minDist = Mathf.Infinity;
+            //foreach (State x in V)
+            //{
+            //    float temp = Vector3.Distance(x.pos, xRand);
+            //    if (temp < minDist)
+            //    {
+            //        minDist = temp;
+            //        xMin = x;
+            //    }
+            //}
+            //return xMin;
+            if (isStartTree)
             {
-                float temp = Vector3.Distance(x.pos, xRand);
-                if (temp < minDist)
-                {
-                    minDist = temp;
-                    xMin = x;
-                }
+                return kdTreeStart.FindClosest(xRand);
             }
-            return xMin;
+            return kdTreeGoal.FindClosest(xRand);
         }
 
         private State Steer(State xNearest,Vector3 xRand)
@@ -275,7 +344,7 @@ namespace UnityStandardAssets.Vehicles.Car
             //float bestAngle = 0;
             State finalState = new State(Vector3.zero, 0, 0, 0, 0);
             for (float steering=-1; steering<=1;steering+=0.1f){
-                for (float accel = 0;accel <=1;accel += 0.1f)
+                for (float accel = 0;accel <=maxAccel;accel += 0.1f)
                 {
                     State newState = NewState(xNearest, accel, steering, fixedDeltaTime);
                     float newDistance = Vector3.Distance(newState.pos, xRand);
