@@ -8338,14 +8338,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 57f37a74d9bc64bfab28e1fee11436aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  terrain_manager_game_object: {fileID: 1358011048}
-  steeringRadius: 1
-  neighborsRadius: 0.5
+  terrain_manager: {fileID: 1358011049}
+  validationDistance: 3
   goalRadius: 3
-  NumberOfIterations: 100000
+  numberOfIterations: 20000
   carLength: 4.6
   carHalfWidth: 1.5
-  validatedDistance: 2
+  currentGoalPos: {x: 0, y: 0, z: 0}
 --- !u!1 &1788454091
 GameObject:
   m_ObjectHideFlags: 0
