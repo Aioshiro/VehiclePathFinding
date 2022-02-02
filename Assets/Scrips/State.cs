@@ -11,14 +11,14 @@ abstract public class State
     public State(Vector3 pos)
     {
         this.pos = pos;
-        this._cost = -1;
+        this._cost = 0;
         this.parent = null;
         this.children = new List<State>();
     }
 
     public float Cost()
     {
-        if (this._cost != -1)
+        if (this._cost >0 || parent is null)
         {
             return this._cost;
         }

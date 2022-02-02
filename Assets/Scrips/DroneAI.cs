@@ -152,6 +152,8 @@ public class DroneAI : MonoBehaviour
     private (StateDrone,StateDrone) RRT(Vector3 xStart, Vector3 xGoal)
     {
         int i = 0;
+        float minCost = Mathf.Infinity;
+        (StateDrone, StateDrone) bestResult = (null,null);
         while (i < numberOfIterations)
         {
             i += 1;
@@ -159,7 +161,11 @@ public class DroneAI : MonoBehaviour
             StateDrone xNew = Extend(rootStart,xRand,true);
             if (!(xNew is null) && Connect(xNew, out StateDrone otherTreeState, false))
             {
-                return (xNew, otherTreeState);
+                if (xNew.Cost() + otherTreeState.Cost() < minCost)
+                {
+                    minCost = xNew.Cost() + otherTreeState.Cost();
+                    bestResult = (xNew, otherTreeState);
+                }
             }
             StateDrone xOtherTree;
             if (!(xNew is null))
@@ -167,7 +173,12 @@ public class DroneAI : MonoBehaviour
                 xOtherTree = Extend(rootGoal, xNew.pos, false);
                 if (!(xOtherTree is null) && Connect(xOtherTree,out otherTreeState, true))
                 {
-                    return (otherTreeState, xOtherTree);
+                    if (otherTreeState.Cost() + xOtherTree.Cost() < minCost)
+                    {
+                        minCost = otherTreeState.Cost() + xOtherTree.Cost();
+                        bestResult = (otherTreeState, xOtherTree);
+                    }
+
                 }
             }
             else
@@ -175,7 +186,8 @@ public class DroneAI : MonoBehaviour
                 Extend(rootGoal, xRand, false);
             }
         }
-        return (null,null);
+        Debug.Log(minCost);
+        return bestResult;
     }
 
     private StateDrone Extend(StateDrone treeRoot,Vector3 xRand, bool startTree)
@@ -275,9 +287,9 @@ public class DroneAI : MonoBehaviour
     {
         float distance = Mathf.Infinity;
         StateDrone finalState = new StateDrone(Vector3.zero, 0, 0);
-        for (float accelX = -1; accelX <= 1; accelX += 0.1f)
+        for (float accelX = -1; accelX < 1.01; accelX += 0.05f)
         {
-            for (float accelY = -1; accelY <= 1; accelY += 0.1f)
+            for (float accelY = -1; accelY < 1.01; accelY += 0.05f)
             {
                 if (accelX * accelX + accelY * accelY < 1)
                 {
@@ -301,9 +313,9 @@ public class DroneAI : MonoBehaviour
         StateDrone CurrentState = new StateDrone(projectedPosition, m_Drone.velocity.x, m_Drone.velocity.z);
         float finalAccelX = 0;
         float finalAccelY = 0;
-        for (float accelX = -1; accelX <= 1; accelX += 0.05f)
+        for (float accelX = -1; accelX < 1.01; accelX += 0.05f)
         {
-            for (float accelY = -1; accelY <= 1; accelY += 0.05f)
+            for (float accelY = -1; accelY < 1.01; accelY += 0.05f)
             {
                 if (accelX * accelX + accelY * accelY < 1)
                 {
