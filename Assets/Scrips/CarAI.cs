@@ -35,7 +35,6 @@ namespace UnityStandardAssets.Vehicles.Car
         private StateCar rootGoal;
         private KdTree kdTreeStart;
         private KdTree kdTreeGoal;
-        [SerializeField] private float maxAccel = 0.4f;
 
 
         private void Start()
@@ -104,6 +103,7 @@ namespace UnityStandardAssets.Vehicles.Car
             //Relative to RRT
             fixedDeltaTime = Time.fixedDeltaTime;
             rootStart = new StateCar(start_pos, 0, Mathf.Deg2Rad * 90, 0, 0);
+
             //Finding the orientation of the goal
             float maxDistance = -Mathf.Infinity;
             float angle = 0;
@@ -139,40 +139,14 @@ namespace UnityStandardAssets.Vehicles.Car
 
         private void FixedUpdate()
         {
-
-            UpdatePath();
-            MoveCar();
-
+            if (!(my_path[0] is null))
+            {
+                MoveCar();
+                currentGoalPos.transform.position = my_path[0].pos;
+            }
         }
 
         private void MoveCar()
-        {
-            if (arrivedAtGoal)
-            {
-                m_Car.Move(0, 1, 1, 0);
-            }
-            Vector3 projectedPosition = new Vector3(this.transform.position.x, 0, transform.position.z);
-            Vector3 averageTwoNextGoals = (my_path[0].pos + my_path[1].pos+ my_path[2].pos) / 3;
-            float angle = Vector3.Angle(currentGoal.pos, averageTwoNextGoals);
-            float accel = maxAccel* (45-angle)/45;
-
-            float currentCarAngle = Vector3.SignedAngle(Vector3.right, transform.forward, Vector3.up);
-            float desiredCarAngle = Vector3.SignedAngle(Vector3.right, currentGoal.pos - projectedPosition, Vector3.up);
-            //Setting the angles from [-180,180] to [0,360] for continuity
-            if (currentCarAngle < 0)
-            {
-                currentCarAngle = 360 + currentCarAngle;
-            }
-            if (desiredCarAngle < 0)
-            {
-                desiredCarAngle = 360 + desiredCarAngle;
-            }
-            float steering = Mathf.Rad2Deg * Mathf.Atan(Mathf.Deg2Rad * (desiredCarAngle - currentCarAngle) * carLength / (m_Car.CurrentSpeed * Time.deltaTime)) / m_Car.m_MaximumSteerAngle;
-            float handBreak = 0;
-            m_Car.Move(steering, accel, accel, handBreak);
-        }
-
-        private void UpdatePath()
         {
             if (my_path.Count == 0)
             {
@@ -186,9 +160,9 @@ namespace UnityStandardAssets.Vehicles.Car
             }
             currentGoal = my_path[0];
             currentGoalPos.transform.position = currentGoal.pos;
+            (float, float) inputs = GoTo(currentGoal.pos);
+            m_Car.Move(inputs.Item2, inputs.Item1,inputs.Item1,0);
         }
-
-
 
 
         private (StateCar,StateCar) RRT(Vector3 xStart, Vector3 xGoal)
@@ -246,27 +220,27 @@ namespace UnityStandardAssets.Vehicles.Car
             return false;
         }
 
-        private StateCar NewState(StateCar xNearest, float accel, float steering, float timeStep)
+        private StateCar NewState(StateCar xNearest, float accel, float steering, float timeStep,float torque = 2000)
         {
             (float, float, float, float) values = (xNearest.pos.x, xNearest.pos.z, xNearest.currentSpeed, xNearest.currentAngle);
             (float, float, float, float) derivatives = GetDerivatives(values, timeStep, accel, steering);
             Vector3 newPos = new Vector3(values.Item1 + derivatives.Item1*timeStep, 0, values.Item2 + derivatives.Item2*timeStep);
             float newSpeed = values.Item3 + derivatives.Item3 * timeStep;
+            newSpeed = Mathf.Clamp(newSpeed, 0, m_Car.MaxSpeed);
             float newAngle = values.Item4 + derivatives.Item4 * timeStep;
             return new StateCar(newPos, newSpeed, newAngle, accel, steering);
         }
 
-        private (float,float,float,float) GetDerivatives((float, float, float, float) state,float timeStep, float accel, float steering)
+        private (float,float,float,float) GetDerivatives((float, float, float, float) state,float timeStep, float accel, float steering,float torque = 2000)
         {
-            float angleDerivative = 2500 * accel * timeStep * Mathf.Tan(Mathf.Deg2Rad * steering * m_Car.m_MaximumSteerAngle) / carLength;
-            return (2500 * accel *timeStep* Mathf.Cos(state.Item4+angleDerivative*timeStep), 2500 * accel * timeStep * Mathf.Sin(state.Item4 + angleDerivative * timeStep),2500*accel, angleDerivative); //2000 is approximate torque
+            float angleDerivative = torque * accel * timeStep * Mathf.Tan(-Mathf.Deg2Rad * steering * m_Car.m_MaximumSteerAngle) / carLength;
+            return (torque * accel *timeStep* Mathf.Cos(state.Item4+angleDerivative*timeStep), torque * accel * timeStep * Mathf.Sin(state.Item4 + angleDerivative * timeStep),torque*accel, angleDerivative); //2000 is approximate torque
         }
 
         private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
         {
             //return (!Physics.Raycast(xStart, (xEnd - xStart).normalized, Vector3.Distance(xStart, xEnd), LayerMask.GetMask("Wall"))); //When the car is considered a point
             return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(carHalfWidth, 1, (xEnd - xStart).magnitude / 2 + carLength), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
-            //return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(carHalfWidth, 1, carLength/2), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
         }
 
         private Vector3 SamplePointInMaze(bool isStartTree)
@@ -311,8 +285,8 @@ namespace UnityStandardAssets.Vehicles.Car
             float distance = Mathf.Infinity;
             //float bestAngle = 0;
             StateCar finalState = new StateCar(Vector3.zero, 0, 0, 0, 0);
-            for (float steering=-1; steering<=1;steering+=0.1f){
-                for (float accel = 0;accel <=maxAccel;accel += 0.1f)
+            for (float steering=-1; steering<1.01;steering+=0.1f){
+                for (float accel = -1;accel <1.01;accel += 0.1f)
                 {
                     StateCar newState = NewState(xNearest, accel, steering, fixedDeltaTime);
                     float newDistance = Vector3.Distance(newState.pos, xRand);
@@ -330,27 +304,27 @@ namespace UnityStandardAssets.Vehicles.Car
         {
             float distance = Mathf.Infinity;
             Vector3 projectedPosition = new Vector3(transform.position.x, 0, transform.position.z);
-            StateCar CurrentState = new StateCar(transform.position, m_Car.CurrentSpeed, m_Drone.velocity.z, m_Drone.acceleration.x, m_Drone.acceleration.z);
-            float finalAccelX = 0;
-            float finalAccelY = 0;
-            for (float accelX = -1; accelX <= 1; accelX += 0.1f)
+            float angle = Vector3.Angle(Vector3.right, transform.forward);
+            if (angle < 0) { angle += 2 * Mathf.PI; }
+            StateCar CurrentState = new StateCar(projectedPosition, m_Car.CurrentSpeed, angle, 0, 0);
+            float finalAccel = 0;
+            float finalSteering= 0;
+
+            for (float steering = -1; steering < 1.01; steering += 0.1f)
             {
-                for (float accelY = -1; accelY <= 1; accelY += 0.1f)
+                for (float accel = -1; accel < 1.01; accel += 0.1f)
                 {
-                    if (accelX * accelX + accelY * accelY < 1)
+                    StateCar newState = NewState(CurrentState, accel, steering, fixedDeltaTime);
+                    float newDistance = Vector3.Distance(newState.pos, xGoal);
+                    if (newDistance < distance)
                     {
-                        StateCar newState = NewState(CurrentState, accelX, accelY, fixedDeltaTime);
-                        float newDistance = Vector3.Distance(newState.pos, xGoal);
-                        if (newDistance < distance)
-                        {
-                            distance = newDistance;
-                            finalAccelX = accelX;
-                            finalAccelY = accelY;
-                        }
+                        distance = newDistance;
+                        finalAccel = accel;
+                        finalSteering= steering;
                     }
                 }
             }
-            return (finalAccelX, finalAccelY);
+            return (finalAccel, finalSteering);
         }
 
     }
