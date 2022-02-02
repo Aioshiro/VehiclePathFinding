@@ -3,7 +3,6 @@ using UnityEngine;
 
 public class StateCar : State
 {
-    private float _cost;
     public float currentSpeed;
     public float currentAngle;
     public float accelFromLastState;

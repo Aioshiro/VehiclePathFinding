@@ -326,5 +326,32 @@ namespace UnityStandardAssets.Vehicles.Car
             return finalState;
         }
 
+        private (float, float) GoTo(Vector3 xGoal)
+        {
+            float distance = Mathf.Infinity;
+            Vector3 projectedPosition = new Vector3(transform.position.x, 0, transform.position.z);
+            StateCar CurrentState = new StateCar(transform.position, m_Car.CurrentSpeed, m_Drone.velocity.z, m_Drone.acceleration.x, m_Drone.acceleration.z);
+            float finalAccelX = 0;
+            float finalAccelY = 0;
+            for (float accelX = -1; accelX <= 1; accelX += 0.1f)
+            {
+                for (float accelY = -1; accelY <= 1; accelY += 0.1f)
+                {
+                    if (accelX * accelX + accelY * accelY < 1)
+                    {
+                        StateCar newState = NewState(CurrentState, accelX, accelY, fixedDeltaTime);
+                        float newDistance = Vector3.Distance(newState.pos, xGoal);
+                        if (newDistance < distance)
+                        {
+                            distance = newDistance;
+                            finalAccelX = accelX;
+                            finalAccelY = accelY;
+                        }
+                    }
+                }
+            }
+            return (finalAccelX, finalAccelY);
+        }
+
     }
 }

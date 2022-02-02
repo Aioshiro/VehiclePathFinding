@@ -1,4 +1,4 @@
-//Source :  https://github.com/orifmilod/kdtree
+//Adapted from :  https://github.com/orifmilod/kdtree
 
 using System;
 using System.Collections;
