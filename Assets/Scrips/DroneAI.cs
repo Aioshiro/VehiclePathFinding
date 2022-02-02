@@ -26,7 +26,7 @@ public class DroneAI : MonoBehaviour
     [SerializeField] private int numberOfIterations = 500;
     private float droneRadius;
 
-    private StateDrone currentGoal = new StateDrone(Vector3.zero, 0, 0, 0, 0);
+    private StateDrone currentGoal = new StateDrone(Vector3.zero, 0, 0);
     public GameObject currentGoalPos;
     private StateDrone rootStart;
     private StateDrone rootGoal;
@@ -103,8 +103,8 @@ public class DroneAI : MonoBehaviour
 
         //Relative to RRT
         fixedDeltaTime = Time.fixedDeltaTime;
-        rootStart = new StateDrone(start_pos, 0, 0, 0, 0);
-        rootGoal = new StateDrone(goal_pos, 0, 0 , 0, 0);
+        rootStart = new StateDrone(start_pos, 0, 0);
+        rootGoal = new StateDrone(goal_pos, 0, 0);
         //Finding the orientation of the goal
         kdTreeStart = new KdTree(true)
             {
@@ -155,24 +155,32 @@ public class DroneAI : MonoBehaviour
         while (i < numberOfIterations)
         {
             i += 1;
-            StateDrone xNew = Extend(rootStart,true);
+            Vector3 xRand = SamplePointInMaze(true);
+            StateDrone xNew = Extend(rootStart,xRand,true);
             if (!(xNew is null) && Connect(xNew, out StateDrone otherTreeState, false))
             {
                 return (xNew, otherTreeState);
             }
-            xNew = Extend(rootGoal, false);
-            if (!(xNew is null) && Connect(xNew, out otherTreeState, true))
+            StateDrone xOtherTree;
+            if (!(xNew is null))
             {
-                return (otherTreeState, xNew);
+                xOtherTree = Extend(rootGoal, xNew.pos, false);
+                if (!(xOtherTree is null) && Connect(xOtherTree,out otherTreeState, true))
+                {
+                    return (otherTreeState, xOtherTree);
+                }
+            }
+            else
+            {
+                Extend(rootGoal, xRand, false);
             }
         }
         return (null,null);
     }
 
-    private StateDrone Extend(StateDrone treeRoot,bool startTree)
+    private StateDrone Extend(StateDrone treeRoot,Vector3 xRand, bool startTree)
     {
         //Sampling random pos in the maze
-        Vector3 xRand = SamplePointInMaze(startTree);
         //Finding nearest point of xRand in the graph
         StateDrone xNearest = Nearest(xRand,startTree);
         StateDrone newState = Steer(xNearest, xRand);
@@ -196,7 +204,7 @@ public class DroneAI : MonoBehaviour
     private bool Connect(StateDrone xNew, out StateDrone otherTreeState, bool isStartTree)
     {
         otherTreeState = Nearest(xNew.pos, isStartTree);
-        if ((otherTreeState.pos-xNew.pos).sqrMagnitude < validationDistance*validationDistance/4)
+        if ((otherTreeState.pos-xNew.pos).sqrMagnitude < validationDistance*validationDistance/10)
         {
             return true;
         }
@@ -205,18 +213,18 @@ public class DroneAI : MonoBehaviour
     private StateDrone NewState(StateDrone xNearest, float accelX, float accelY, float timeStep)
     {
         (float, float, float, float) values = (xNearest.pos.x, xNearest.pos.z, xNearest.currentXSpeed, xNearest.currentYSpeed);
-        (float, float, float, float) derivatives = GetDerivatives(values, timeStep, accelX, accelY);
-        float newXSpeed = values.Item3 + derivatives.Item3 * timeStep;
+        (float, float) derivatives = GetDerivatives(values, timeStep, accelX, accelY);
+        float newXSpeed = values.Item3 + derivatives.Item1 * timeStep;
         newXSpeed = Mathf.Clamp(newXSpeed, -m_Drone.max_speed, m_Drone.max_speed);
-        float newYSpeed = values.Item4 + derivatives.Item4 * timeStep;
+        float newYSpeed = values.Item4 + derivatives.Item2 * timeStep;
         newYSpeed = Mathf.Clamp(newYSpeed, -m_Drone.max_speed, m_Drone.max_speed);
         Vector3 newPos = new Vector3(values.Item1 + newXSpeed * timeStep, 0, values.Item2 + newYSpeed * timeStep);
-        return new StateDrone(newPos, newXSpeed, newYSpeed, accelX, accelY);
+        return new StateDrone(newPos, newXSpeed, newYSpeed);
     }
 
-    private (float, float, float, float) GetDerivatives((float, float, float, float) state, float timeStep, float accelX, float accelY)
+    private (float, float) GetDerivatives((float, float, float, float) state, float timeStep, float accelX, float accelY)
     {
-        return (accelX * timeStep* maxAccel, accelY* timeStep * maxAccel, accelX * maxAccel, accelY * maxAccel); 
+        return (accelX * maxAccel, accelY * maxAccel); 
     }
 
     private bool CollisionFree(Vector3 xStart, Vector3 xEnd)
@@ -266,7 +274,7 @@ public class DroneAI : MonoBehaviour
     private StateDrone Steer(StateDrone xNearest, Vector3 xRand)
     {
         float distance = Mathf.Infinity;
-        StateDrone finalState = new StateDrone(Vector3.zero, 0, 0, 0, 0);
+        StateDrone finalState = new StateDrone(Vector3.zero, 0, 0);
         for (float accelX = -1; accelX <= 1; accelX += 0.1f)
         {
             for (float accelY = -1; accelY <= 1; accelY += 0.1f)
@@ -290,12 +298,12 @@ public class DroneAI : MonoBehaviour
     {
         float distance = Mathf.Infinity;
         Vector3 projectedPosition = new Vector3(transform.position.x, 0, transform.position.z);
-        StateDrone CurrentState = new StateDrone(projectedPosition, m_Drone.velocity.x, m_Drone.velocity.z, m_Drone.acceleration.x, m_Drone.acceleration.z);
+        StateDrone CurrentState = new StateDrone(projectedPosition, m_Drone.velocity.x, m_Drone.velocity.z);
         float finalAccelX = 0;
         float finalAccelY = 0;
-        for (float accelX = -1; accelX <= 1; accelX += 0.1f)
+        for (float accelX = -1; accelX <= 1; accelX += 0.05f)
         {
-            for (float accelY = -1; accelY <= 1; accelY += 0.1f)
+            for (float accelY = -1; accelY <= 1; accelY += 0.05f)
             {
                 if (accelX * accelX + accelY * accelY < 1)
                 {

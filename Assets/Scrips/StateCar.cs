@@ -5,15 +5,11 @@ public class StateCar : State
 {
     public float currentSpeed;
     public float currentAngle;
-    public float accelFromLastState;
-    public float steeringFromLastState;
 
-    public StateCar(Vector3 pos, float currentSpeed, float currentAngle, float accelFromLastState, float steeringFromLastState): base(pos)
+    public StateCar(Vector3 pos, float currentSpeed, float currentAngle): base(pos)
     {
         this.currentSpeed = currentSpeed;
         this.currentAngle = currentAngle;
-        this.accelFromLastState = accelFromLastState;
-        this.steeringFromLastState = steeringFromLastState;
     }
 
 }

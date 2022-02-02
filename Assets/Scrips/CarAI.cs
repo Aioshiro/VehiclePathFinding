@@ -29,7 +29,7 @@ namespace UnityStandardAssets.Vehicles.Car
         [SerializeField] private int numberOfIterations = 500;
         [SerializeField] private float carLength;
         [SerializeField] private float carHalfWidth;
-        private StateCar currentGoal = new StateCar(Vector3.zero,0,0,0,0);
+        private StateCar currentGoal = new StateCar(Vector3.zero,0,0);
         public GameObject currentGoalPos;
         private StateCar rootStart;
         private StateCar rootGoal;
@@ -102,7 +102,7 @@ namespace UnityStandardAssets.Vehicles.Car
 
             //Relative to RRT
             fixedDeltaTime = Time.fixedDeltaTime;
-            rootStart = new StateCar(start_pos, 0, Mathf.Deg2Rad * 90, 0, 0);
+            rootStart = new StateCar(start_pos, 0, Mathf.Deg2Rad * 90);
 
             //Finding the orientation of the goal
             float maxDistance = -Mathf.Infinity;
@@ -123,7 +123,7 @@ namespace UnityStandardAssets.Vehicles.Car
                     angle = Mathf.PI / 2 * i;
                 }
             }
-            rootGoal = new StateCar(goal_pos, 0,angle, 0, 0);
+            rootGoal = new StateCar(goal_pos,0,angle);
             kdTreeStart = new KdTree(true)
             {
                 rootStart
@@ -165,33 +165,40 @@ namespace UnityStandardAssets.Vehicles.Car
         }
 
 
-        private (StateCar,StateCar) RRT(Vector3 xStart, Vector3 xGoal)
+        private (StateCar, StateCar) RRT(Vector3 xStart, Vector3 xGoal)
         {
             int i = 0;
             while (i < numberOfIterations)
             {
                 i += 1;
-                StateCar xNew = Extend(rootStart, true);
+                Vector3 xRand = SamplePointInMaze(true);
+                StateCar xNew = Extend(rootStart, xRand, true);
                 if (!(xNew is null) && Connect(xNew, out StateCar otherTreeState, false))
                 {
                     return (xNew, otherTreeState);
                 }
-                xNew = Extend(rootGoal, false);
-                if (!(xNew is null) && Connect(xNew, out otherTreeState, true))
+                StateCar xOtherTree;
+                if (!(xNew is null))
                 {
-                    return (otherTreeState, xNew);
+                    xOtherTree = Extend(rootGoal, xNew.pos, false);
+                    if (!(xOtherTree is null) && Connect(xOtherTree, out otherTreeState, true))
+                    {
+                        return (otherTreeState, xOtherTree);
+                    }
                 }
-
+                else
+                {
+                    Extend(rootGoal, xRand, false);
+                }
             }
-            return (null,null);
+            return (null, null);
         }
 
-        private StateCar Extend(StateCar treeRoot,bool startTree)
+        private StateCar Extend(StateCar treeRoot, Vector3 xRand, bool startTree)
         {
             //Sampling random pos in the maze
-            Vector3 xRand = SamplePointInMaze(startTree);
             //Finding nearest point of xRand in the graph
-            StateCar xNearest = Nearest(xRand,startTree);
+            StateCar xNearest = Nearest(xRand, startTree);
             StateCar newState = Steer(xNearest, xRand);
             if (CollisionFree(xNearest.pos, newState.pos)) // If we can go to xNearest to xNew, we add xNew to the graph
             {
@@ -210,6 +217,7 @@ namespace UnityStandardAssets.Vehicles.Car
             return null;
         }
 
+
         private bool Connect(StateCar xNew, out StateCar otherTreeState,bool isStartTree)
         {
             otherTreeState = Nearest(xNew.pos, isStartTree);
@@ -220,22 +228,49 @@ namespace UnityStandardAssets.Vehicles.Car
             return false;
         }
 
-        private StateCar NewState(StateCar xNearest, float accel, float steering, float timeStep,float torque = 2000)
+        //private StateCar NewState(StateCar xNearest, float accel, float steering, float timeStep,float torque = 2000)
+        //{
+        //    (float, float, float,float, float) values = (xNearest.pos.x, xNearest.pos.z, xNearest.currentXSpeed,xNearest.currentYSpeed, xNearest.currentAngle);
+        //    (float, float, float, float,float) derivatives = GetDerivatives(values, timeStep, accel, steering);
+        //    Vector3 newPos = new Vector3(values.Item1 + derivatives.Item1*timeStep, 0, values.Item2 + derivatives.Item2*timeStep);
+        //    float newXSpeed = values.Item3 + derivatives.Item3 * timeStep;
+        //    float newYSpeed = values.Item4 + derivatives.Item4 * timeStep;
+        //    float currentSpeed = Mathf.Sqrt(Mathf.Pow(newXSpeed, 2) + Mathf.Pow(newYSpeed, 2));
+        //    float normalizedSpeed = Mathf.Clamp(currentSpeed, 0, m_Car.MaxSpeed);
+        //    newXSpeed = normalizedSpeed * newXSpeed / currentSpeed;
+        //    newYSpeed = normalizedSpeed * newYSpeed / currentSpeed;
+        //    float newAngle = values.Item5 + derivatives.Item5* timeStep;
+        //    return new StateCar(newPos, newXSpeed,newYSpeed, newAngle, accel, steering);
+        //}
+
+        //private (float,float,float,float,float) GetDerivatives((float, float, float,float, float) state,float timeStep, float accel, float steering,float torque = 2000)
+        //{
+        //    float currentSpeed = Mathf.Sqrt(Mathf.Pow(state.Item3, 2) + Mathf.Pow(state.Item4, 2));
+        //    currentSpeed = Mathf.Sqrt(Mathf.Pow(currentSpeed + accel*torque*timeStep, 2) + Mathf.Pow(state.Item4+accel*torque*timeStep, 2));
+        //    float angleDerivative = currentSpeed * Mathf.Tan(Mathf.Deg2Rad * steering * m_Car.m_MaximumSteerAngle) / carLength;
+        //    return (currentSpeed*state.Item3* Mathf.Cos(state.Item5+angleDerivative*timeStep),
+        //        currentSpeed * Mathf.Sin(state.Item5 + angleDerivative * timeStep),
+        //        torque*accel*Mathf.Cos(state.Item5 + angleDerivative * timeStep) - angleDerivative*currentSpeed*Mathf.Sin(state.Item5 + angleDerivative * timeStep),
+        //        torque * accel * Mathf.Sin(state.Item5 + angleDerivative * timeStep) + angleDerivative * currentSpeed * Mathf.Sin(state.Item5 + angleDerivative * timeStep),
+        //        angleDerivative); //2000 is approximate torque
+        //}
+
+        private StateCar NewState(StateCar xNearest, float accel, float steering, float timeStep, float torque = 2000)
         {
             (float, float, float, float) values = (xNearest.pos.x, xNearest.pos.z, xNearest.currentSpeed, xNearest.currentAngle);
-            (float, float, float, float) derivatives = GetDerivatives(values, timeStep, accel, steering);
-            Vector3 newPos = new Vector3(values.Item1 + derivatives.Item1*timeStep, 0, values.Item2 + derivatives.Item2*timeStep);
-            float newSpeed = values.Item3 + derivatives.Item3 * timeStep;
+            (float, float) derivatives = GetDerivatives(values, timeStep, accel, steering);
+            Vector3 newPos = new Vector3(values.Item1 + derivatives.Item1 * timeStep*Mathf.Cos(values.Item4), 0, values.Item2 + derivatives.Item1 * timeStep * Mathf.Sin(values.Item4));
+            float newSpeed = xNearest.currentSpeed + derivatives.Item1 * timeStep;
             newSpeed = Mathf.Clamp(newSpeed, 0, m_Car.MaxSpeed);
-            float newAngle = values.Item4 + derivatives.Item4 * timeStep;
-            return new StateCar(newPos, newSpeed, newAngle, accel, steering);
+            float newAngle = xNearest.currentAngle + derivatives.Item2* timeStep;
+            return new StateCar(newPos, newSpeed,newAngle);
         }
 
-        private (float,float,float,float) GetDerivatives((float, float, float, float) state,float timeStep, float accel, float steering,float torque = 2000)
+        private (float, float) GetDerivatives((float, float, float, float) state, float timeStep, float accel, float steering, float torque = 2000)
         {
-            float angleDerivative = torque * accel * timeStep * Mathf.Tan(-Mathf.Deg2Rad * steering * m_Car.m_MaximumSteerAngle) / carLength;
-            return (torque * accel *timeStep* Mathf.Cos(state.Item4+angleDerivative*timeStep), torque * accel * timeStep * Mathf.Sin(state.Item4 + angleDerivative * timeStep),torque*accel, angleDerivative); //2000 is approximate torque
+            return (accel * torque, state.Item3 * Mathf.Tan(Mathf.Deg2Rad * steering * m_Car.m_MaximumSteerAngle) / carLength);
         }
+
 
         private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
         {
@@ -284,7 +319,7 @@ namespace UnityStandardAssets.Vehicles.Car
         {
             float distance = Mathf.Infinity;
             //float bestAngle = 0;
-            StateCar finalState = new StateCar(Vector3.zero, 0, 0, 0, 0);
+            StateCar finalState = new StateCar(Vector3.zero, 0,0);
             for (float steering=-1; steering<1.01;steering+=0.1f){
                 for (float accel = -1;accel <1.01;accel += 0.1f)
                 {
@@ -306,13 +341,13 @@ namespace UnityStandardAssets.Vehicles.Car
             Vector3 projectedPosition = new Vector3(transform.position.x, 0, transform.position.z);
             float angle = Vector3.Angle(Vector3.right, transform.forward);
             if (angle < 0) { angle += 2 * Mathf.PI; }
-            StateCar CurrentState = new StateCar(projectedPosition, m_Car.CurrentSpeed, angle, 0, 0);
+            StateCar CurrentState = new StateCar(projectedPosition,m_Car.CurrentSpeed, angle);
             float finalAccel = 0;
             float finalSteering= 0;
 
-            for (float steering = -1; steering < 1.01; steering += 0.1f)
+            for (float steering = -1; steering < 1.01; steering += 0.05f)
             {
-                for (float accel = -1; accel < 1.01; accel += 0.1f)
+                for (float accel = -1; accel < 1.01; accel += 0.05f)
                 {
                     StateCar newState = NewState(CurrentState, accel, steering, fixedDeltaTime);
                     float newDistance = Vector3.Distance(newState.pos, xGoal);
