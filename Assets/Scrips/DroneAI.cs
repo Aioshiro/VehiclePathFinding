@@ -7,7 +7,7 @@ public class DroneAI : MonoBehaviour
 
     //Path parameters
     private DroneController m_Drone; // the car controller we want to use
-    [SerializeField] private List<StateDrone> my_path;
+    [SerializeField] private Stack<StateDrone> my_path;
 
     //Maze parameters
     public TerrainManager terrain_manager;
@@ -19,24 +19,23 @@ public class DroneAI : MonoBehaviour
     //RRT parameters
     [Header("RRT Settings")]
     private float fixedDeltaTime;
-    private bool arrivedAtGoal = false;
-    [SerializeField] private float validationDistance = 1.0f;
     [Tooltip("Radius where we consider we're close enough to the goal")]
-    private float goalRadius;
+    private float goalRadiusSquared;
     [SerializeField] private int numberOfIterations = 500;
     private float droneRadius;
 
-    private StateDrone currentGoal = new StateDrone(Vector3.zero, 0, 0);
     public GameObject currentGoalPos;
-    private StateDrone rootStart;
-    private StateDrone rootGoal;
-    private KdTree kdTreeStart;
-    private KdTree kdTreeGoal;
+    //private StateDrone rootStart;
+    //private StateDrone rootGoal;
+    //private KdTree kdTreeStart;
+    //private KdTree kdTreeGoal;
     private float maxAccel=15.0f;
-
+    //private List<StateDrone> VGoal;
+    [SerializeField] private StateDrone currentState;
 
     private void Start()
     {
+
         InitializeRRTParameters();
 
         // get the car controller
@@ -44,33 +43,22 @@ public class DroneAI : MonoBehaviour
         maxAccel = m_Drone.max_acceleration;
 
 
-        // Plot your path to see if it makes sense
-        // Note that path can only be seen in "Scene" window, not "Game" window
-        (StateDrone,StateDrone) meetingPoint = RRT(start_pos, goal_pos);
+        StateDrone initialState = new StateDrone(start_pos, 0, 0,(0,0));
+        StateDrone finalState = RRT(initialState);
 
-        ShowTree(rootStart, Color.red);
-        ShowTree(rootGoal, Color.blue);
-        ShowingTreeAndPath(meetingPoint);
+        ShowTree(initialState, Color.red);
+        //ShowTree(rootGoal, Color.blue);
+        ShowingTreeAndPath(finalState);
 
     }
 
-    private void ShowingTreeAndPath((StateDrone, StateDrone) finalStates)
+    private void ShowingTreeAndPath(StateDrone finalStates)
     {
         //Recreating the path
-        StateDrone currentState = finalStates.Item1;
-        my_path.Add(currentState);
+        StateDrone currentState = finalStates;
         while (!(currentState.parent is null))
         {
-            my_path.Add((StateDrone)currentState.parent);
-            Debug.DrawLine(currentState.pos, currentState.parent.pos, Color.green, Mathf.Infinity, false);
-            currentState = (StateDrone)currentState.parent;
-        }
-        my_path.Reverse();
-        currentState = finalStates.Item2;
-        my_path.Add(currentState);
-        while (!(currentState.parent is null))
-        {
-            my_path.Add((StateDrone)currentState.parent);
+            my_path.Push((StateDrone)currentState.parent);
             Debug.DrawLine(currentState.pos, currentState.parent.pos, Color.green, Mathf.Infinity, false);
             currentState = (StateDrone)currentState.parent;
         }
@@ -90,41 +78,30 @@ public class DroneAI : MonoBehaviour
 
     private void InitializeRRTParameters()
     {
-
         //Relative to Terrain
         start_pos = terrain_manager.myInfo.start_pos;
         goal_pos = terrain_manager.myInfo.goal_pos;
         terrainCenter = new Vector2(terrain_manager.myInfo.x_high + terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high + terrain_manager.myInfo.z_low);
         terrainCenter /= 2;
         terrainSize = Mathf.Max(terrain_manager.myInfo.x_high - terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high - terrain_manager.myInfo.z_low) / 2;
-        goalRadius = FindObjectOfType<GameManager>().goal_tolerance;
-        droneRadius = this.GetComponent<SphereCollider>().radius +0.1f;
+        goalRadiusSquared = FindObjectOfType<GameManager>().goal_tolerance;
+        goalRadiusSquared *= goalRadiusSquared;
+        droneRadius = this.GetComponent<SphereCollider>().radius+1f;
 
 
         //Relative to RRT
+        StateDrone.InitializeInputs();
         fixedDeltaTime = Time.fixedDeltaTime;
-        rootStart = new StateDrone(start_pos, 0, 0);
-        rootGoal = new StateDrone(goal_pos, 0, 0);
-        //Finding the orientation of the goal
-        kdTreeStart = new KdTree(true)
-            {
-                rootStart
-            };
-        kdTreeGoal = new KdTree(true)
-            {
-                rootGoal
-            };
 
-        my_path = new List<StateDrone>();
+        my_path = new Stack<StateDrone>();
 
     }
 
     private void FixedUpdate()
     {
-        if (!(my_path[0] is null))
+        if (my_path.Count !=0)
         {
             MoveDrone();
-            currentGoalPos.transform.position = my_path[0].pos;
         }
     }
 
@@ -132,111 +109,50 @@ public class DroneAI : MonoBehaviour
     {
         if (my_path.Count == 0)
         {
-            arrivedAtGoal = true;
             return;
         }
-        Vector3 projectedPosition = new Vector3(this.transform.position.x, 0, transform.position.z);
-        while (Vector3.Distance(my_path[0].pos, projectedPosition) < validationDistance)
-        {
-            my_path.RemoveAt(0);
-        }
-        maxAccel = m_Drone.max_acceleration;
-        currentGoal = my_path[0];
-        currentGoalPos.transform.position = currentGoal.pos;
-        (float, float) inputs = GoTo(currentGoal.pos);
-        m_Drone.Move(inputs.Item1, inputs.Item2);
+        currentState = my_path.Pop();
+        currentGoalPos.transform.position = currentState.pos;
+        m_Drone.Move(currentState.inputFromLastState.Item1, currentState.inputFromLastState.Item2);
     }
 
-
-
-    private (StateDrone,StateDrone) RRT(Vector3 xStart, Vector3 xGoal)
+    private StateDrone RRT(StateDrone lastTreeState)
     {
-        int i = 0;
-        float minCost = Mathf.Infinity;
-        (StateDrone, StateDrone) bestResult = (null,null);
-        while (i < numberOfIterations)
+        List<StateDrone> V = new List<StateDrone>
         {
-            i += 1;
-            Vector3 xRand = SamplePointInMaze(true);
-            StateDrone xNew = Extend(rootStart,xRand,true);
-            if (!(xNew is null) && Connect(xNew, out StateDrone otherTreeState, false))
+            lastTreeState
+        };
+        for (int i = 0; i < numberOfIterations; i++)
+        {
+            Vector3 xRandom = SamplePointInMaze(goal_pos);
+            StateDrone xNear = Nearest(V,xRandom);
+            if (Control(xNear, xRandom, out StateDrone newState))
             {
-                if (xNew.Cost() + otherTreeState.Cost() < minCost)
+                V.Add(newState);
+                newState.parent = xNear;
+                xNear.children.Add(newState);
+                if ((newState.pos -goal_pos).sqrMagnitude < goalRadiusSquared)
                 {
-                    minCost = xNew.Cost() + otherTreeState.Cost();
-                    bestResult = (xNew, otherTreeState);
+                    return newState;
                 }
             }
-            StateDrone xOtherTree;
-            if (!(xNew is null))
-            {
-                xOtherTree = Extend(rootGoal, xNew.pos, false);
-                if (!(xOtherTree is null) && Connect(xOtherTree,out otherTreeState, true))
-                {
-                    if (otherTreeState.Cost() + xOtherTree.Cost() < minCost)
-                    {
-                        minCost = otherTreeState.Cost() + xOtherTree.Cost();
-                        bestResult = (otherTreeState, xOtherTree);
-                    }
-
-                }
-            }
-            else
-            {
-                Extend(rootGoal, xRand, false);
-            }
-        }
-        Debug.Log(minCost);
-        return bestResult;
-    }
-
-    private StateDrone Extend(StateDrone treeRoot,Vector3 xRand, bool startTree)
-    {
-        //Sampling random pos in the maze
-        //Finding nearest point of xRand in the graph
-        StateDrone xNearest = Nearest(xRand,startTree);
-        StateDrone newState = Steer(xNearest, xRand);
-        if (CollisionFree(xNearest.pos, newState.pos)) // If we can go to xNearest to xNew, we add xNew to the graph
-        {
-            if (startTree)
-            {
-                kdTreeStart.Add(newState);
-            }
-            else
-            {
-                kdTreeGoal.Add(newState);
-            }
-            newState.parent = xNearest;
-            xNearest.children.Add(newState);
-            return newState;
         }
         return null;
     }
 
-    private bool Connect(StateDrone xNew, out StateDrone otherTreeState, bool isStartTree)
-    {
-        otherTreeState = Nearest(xNew.pos, isStartTree);
-        if ((otherTreeState.pos-xNew.pos).sqrMagnitude < validationDistance*validationDistance/10)
-        {
-            return true;
-        }
-        return false;
-    }
+
     private StateDrone NewState(StateDrone xNearest, float accelX, float accelY, float timeStep)
     {
-        (float, float, float, float) values = (xNearest.pos.x, xNearest.pos.z, xNearest.currentXSpeed, xNearest.currentYSpeed);
-        (float, float) derivatives = GetDerivatives(values, timeStep, accelX, accelY);
-        float newXSpeed = values.Item3 + derivatives.Item1 * timeStep;
-        newXSpeed = Mathf.Clamp(newXSpeed, -m_Drone.max_speed, m_Drone.max_speed);
-        float newYSpeed = values.Item4 + derivatives.Item2 * timeStep;
-        newYSpeed = Mathf.Clamp(newYSpeed, -m_Drone.max_speed, m_Drone.max_speed);
-        Vector3 newPos = new Vector3(values.Item1 + newXSpeed * timeStep, 0, values.Item2 + newYSpeed * timeStep);
-        return new StateDrone(newPos, newXSpeed, newYSpeed);
-    }
-
-    private (float, float) GetDerivatives((float, float, float, float) state, float timeStep, float accelX, float accelY)
-    {
-        return (accelX * maxAccel, accelY * maxAccel); 
+        float newXSpeed = xNearest.currentXSpeed + accelX * maxAccel * timeStep;
+        float newYSpeed = xNearest.currentYSpeed + accelY * maxAccel * timeStep;
+        float totalVelocity = Mathf.Sqrt(newXSpeed * newXSpeed + newYSpeed * newYSpeed);
+        if (totalVelocity > m_Drone.max_speed)
+        {
+            newXSpeed *= (m_Drone.max_speed / totalVelocity);
+            newYSpeed *= (m_Drone.max_speed / totalVelocity);
+        }
+        Vector3 newPos = new Vector3(xNearest.pos.x + newXSpeed * timeStep, 0, xNearest.pos.z + newYSpeed * timeStep);
+        return new StateDrone(newPos, newXSpeed, newYSpeed,(accelX,accelY));
     }
 
     private bool CollisionFree(Vector3 xStart, Vector3 xEnd)
@@ -246,91 +162,105 @@ public class DroneAI : MonoBehaviour
         return (!Physics.SphereCast(xStart, droneRadius, xEnd - xStart,out _, (xEnd-xStart).magnitude, LayerMask.GetMask("Wall")));
     }
 
-    private Vector3 SamplePointInMaze(bool isStartTree)
+    private Vector3 SamplePointInMaze(Vector3 xGoal)
     {
-        if (Random.value <= 0.99)
+        if (Random.value <= 0.9)
         {
             Vector3 xRand = new Vector3(2 * UnityEngine.Random.value - 1, 0, 2 * UnityEngine.Random.value - 1);
             xRand *= terrainSize; //Sampling random pos in the maze
             xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
+            if (Physics.CheckSphere(xRand,1, LayerMask.GetMask("Wall")))
+            {
+                xRand = new Vector3(2 * UnityEngine.Random.value - 1, 0, 2 * UnityEngine.Random.value - 1);
+                xRand *= terrainSize; //Sampling random pos in the maze
+                xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
+            }
             return xRand;
         }
-        if (isStartTree)
-        {
-            return goal_pos; // sampling the goal 1% of the time to help convergence
-        }
-        return start_pos;
+        return xGoal; // sampling the goal 1% of the time to help convergence
     }
 
-    private StateDrone Nearest(Vector3 xRand, bool isStartTree)
+    private StateDrone Nearest(List<StateDrone> V, Vector3 xRand)
     {
-        //State xMin = new State(Vector3.zero, 0, 0, 0, 0);
-        //float minDist = Mathf.Infinity;
-        //foreach (State x in V)
-        //{
-        //    float temp = Vector3.Distance(x.pos, xRand);
-        //    if (temp < minDist)
-        //    {
-        //        minDist = temp;
-        //        xMin = x;
-        //    }
-        //}
-        //return xMin;
-        if (isStartTree)
+        StateDrone xMin = null;
+        StateDrone xMinPrime = null;
+        float minDist = Mathf.Infinity;
+        float minDistPrime = Mathf.Infinity;
+        foreach (StateDrone x in V)
         {
-            return (StateDrone)kdTreeStart.FindClosest(xRand);
-        }
-        return (StateDrone)kdTreeGoal.FindClosest(xRand);
-    }
-
-    private StateDrone Steer(StateDrone xNearest, Vector3 xRand)
-    {
-        float distance = Mathf.Infinity;
-        StateDrone finalState = new StateDrone(Vector3.zero, 0, 0);
-        for (float accelX = -1; accelX < 1.01; accelX += 0.05f)
-        {
-            for (float accelY = -1; accelY < 1.01; accelY += 0.05f)
+            if (x.statesLeft.Count != 0)
             {
-                if (accelX * accelX + accelY * accelY < 1)
+                float temp = (x.pos- xRand).sqrMagnitude;
+                if (temp < minDistPrime)
                 {
-                    StateDrone newState = NewState(xNearest, accelX, accelY, fixedDeltaTime);
-                    float newDistance = (newState.pos - xRand).sqrMagnitude;
-                    if (newDistance < distance)
-                    {
-                        distance = newDistance;
-                        finalState = newState;
-                    }
+                    minDistPrime = temp;
+                    xMinPrime = x;
+                }
+                if (Random.value> x.violationFrequency && temp< minDist)
+                {
+                    minDist = temp;
+                    xMin = x;
                 }
             }
         }
-        return finalState;
+       if (minDist != Mathf.Infinity)
+        {
+            return xMin;
+        }
+        return xMinPrime;
     }
 
-    private (float,float) GoTo(Vector3 xGoal)
+
+    private bool Control(StateDrone xNear, Vector3 xRand, out StateDrone newState)
     {
-        float distance = Mathf.Infinity;
-        Vector3 projectedPosition = new Vector3(transform.position.x, 0, transform.position.z);
-        StateDrone CurrentState = new StateDrone(projectedPosition, m_Drone.velocity.x, m_Drone.velocity.z);
-        float finalAccelX = 0;
-        float finalAccelY = 0;
-        for (float accelX = -1; accelX < 1.01; accelX += 0.05f)
+        float dMin = Mathf.Infinity;
+        bool success = false;
+        int uBest = -1;
+        Stack<int> statesToRemove = new Stack<int>();
+        newState = null;
+        foreach (int i in xNear.statesLeft)
         {
-            for (float accelY = -1; accelY < 1.01; accelY += 0.05f)
+            StateDrone xPrime = NewState(xNear, StateDrone.possibleInputs[i].Item1, StateDrone.possibleInputs[i].Item2, fixedDeltaTime);
+            if (CollisionFree(xNear.pos, xPrime.pos))
             {
-                if (accelX * accelX + accelY * accelY < 1)
+                float d = (xPrime.pos - xRand).sqrMagnitude;
+                if (d < dMin)
                 {
-                    StateDrone newState = NewState(CurrentState, accelX, accelY, fixedDeltaTime);
-                    float newDistance = Vector3.Distance(newState.pos, xGoal);
-                    if (newDistance < distance)
-                    {
-                        distance = newDistance;
-                        finalAccelX = accelX;
-                        finalAccelY = accelY;
-                    }
+                    dMin = d;
+                    success = true;
+                    uBest = i;
+                    newState = xPrime;
                 }
             }
+            else
+            {
+                statesToRemove.Push(i);
+                UpdateTreeInfo(xNear);
+            }
         }
-        return (finalAccelX, finalAccelY);
+        statesToRemove.Push(uBest);
+        foreach (int i in statesToRemove)
+        {
+            xNear.statesLeft.Remove(i);
+        }
+        return success;
     }
+
+
+    private void UpdateTreeInfo(StateDrone xNear)
+    {
+        float m = StateDrone.numberOfPossibleInputs;
+        float p = 1 / m;
+        xNear.violationFrequency += p;
+        p *= p;
+        StateDrone x1 = xNear;
+        while (!(x1.parent is null))
+        {
+            x1 = (StateDrone) x1.parent;
+            x1.violationFrequency += p;
+            p /= m;
+        }
+    }
+
 }
 
