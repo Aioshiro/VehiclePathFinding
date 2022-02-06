@@ -39,10 +39,9 @@ public class DroneAI : MonoBehaviour
         maxAccel = m_Drone.max_acceleration;
 
 
-        StateDrone initialState = new StateDrone(start_pos, 0, 0,(0,0));
+        StateDrone initialState = new StateDrone(start_pos, 0, 0);
         StateDrone finalState = RRT(initialState);
         ShowTree(initialState, Color.red);
-        //ShowTree(rootGoal, Color.blue);
         ShowingTreeAndPath(finalState);
         currentState = my_path.Pop();
     }
@@ -61,6 +60,7 @@ public class DroneAI : MonoBehaviour
 
     private void ShowTree(StateDrone currentState, Color color)
     {
+        //Drawing the tree
         if (currentState.children.Count != 0)
         {
             foreach (StateDrone child in currentState.children)
@@ -81,7 +81,7 @@ public class DroneAI : MonoBehaviour
         terrainSize = Mathf.Max(terrain_manager.myInfo.x_high - terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high - terrain_manager.myInfo.z_low) / 2;
         goalRadiusSquared = FindObjectOfType<GameManager>().goal_tolerance/2;
         goalRadiusSquared *= goalRadiusSquared;
-        droneRadius = this.GetComponent<SphereCollider>().radius+1f;
+        droneRadius = GetComponent<SphereCollider>().radius+1f;
 
 
         //Relative to RRT
@@ -154,12 +154,11 @@ public class DroneAI : MonoBehaviour
             newYSpeed *= (m_Drone.max_speed / totalVelocity);
         }
         Vector3 newPos = new Vector3(xNearest.pos.x + newXSpeed * timeStep, 0, xNearest.pos.z + newYSpeed * timeStep);
-        return new StateDrone(newPos, newXSpeed, newYSpeed,(accelX,accelY));
+        return new StateDrone(newPos, newXSpeed, newYSpeed);
     }
 
     private bool CollisionFree(Vector3 xStart, Vector3 xEnd)
     {
-        //return (!Physics.Raycast(xStart, (xEnd - xStart).normalized, Vector3.Distance(xStart, xEnd), LayerMask.GetMask("Wall"))); //When the car is considered a point
         //return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(droneHalfWidth, 1, (xEnd - xStart).magnitude / 2 + droneHalfLength), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
         return (!Physics.SphereCast(xStart, droneRadius, xEnd - xStart,out _, (xEnd-xStart).magnitude, LayerMask.GetMask("Wall")));
     }
@@ -168,12 +167,12 @@ public class DroneAI : MonoBehaviour
     {
         if (Random.value <= 0.9)
         {
-            Vector3 xRand = new Vector3(2 * UnityEngine.Random.value - 1, 0, 2 * UnityEngine.Random.value - 1);
+            Vector3 xRand = new Vector3(2 * Random.value - 1, 0, 2 *Random.value - 1);
             xRand *= terrainSize; //Sampling random pos in the maze
             xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
             if (Physics.CheckSphere(xRand,1, LayerMask.GetMask("Wall")))
             {
-                xRand = new Vector3(2 * UnityEngine.Random.value - 1, 0, 2 * UnityEngine.Random.value - 1);
+                xRand = new Vector3(2 * Random.value - 1, 0, 2 * Random.value - 1);
                 xRand *= terrainSize; //Sampling random pos in the maze
                 xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
             }

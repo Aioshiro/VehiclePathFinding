@@ -2,15 +2,17 @@
 using System.Collections.Generic;
 using UnityEngine;
 using System;
+using Random = UnityEngine.Random;
 
 namespace UnityStandardAssets.Vehicles.Car
 {
     [RequireComponent(typeof(CarController))]
     public class CarAI : MonoBehaviour
     {
+
         //Path parameters
         private CarController m_Car; // the car controller we want to use
-        [SerializeField] private List<StateCar> my_path;
+        [SerializeField] private Stack<StateCar> my_path;
 
         //Maze parameters
         public TerrainManager terrain_manager;
@@ -22,345 +24,241 @@ namespace UnityStandardAssets.Vehicles.Car
         //RRT parameters
         [Header("RRT Settings")]
         private float fixedDeltaTime;
-        private bool arrivedAtGoal = false;
-        [SerializeField] private float validationDistance = 1.0f;
         [Tooltip("Radius where we consider we're close enough to the goal")]
-        private float goalRadius;
+        private float goalRadiusSquared;
         [SerializeField] private int numberOfIterations = 500;
-        [SerializeField] private float carLength;
-        [SerializeField] private float carHalfWidth;
-        private StateCar currentGoal = new StateCar(Vector3.zero,0,0);
-        public GameObject currentGoalPos;
-        private StateCar rootStart;
-        private StateCar rootGoal;
-        private KdTree kdTreeStart;
-        private KdTree kdTreeGoal;
 
+        public GameObject currentGoalPos;
+        [SerializeField] private StateCar currentState;
+        [SerializeField] private float timeStepScaling = 1.0f;
 
         private void Start()
         {
+
             InitializeRRTParameters();
 
             // get the car controller
             m_Car = GetComponent<CarController>();
 
 
-            // Plot your path to see if it makes sense
-            // Note that path can only be seen in "Scene" window, not "Game" window
-            (StateCar,StateCar) meetingPoints = RRT(start_pos, goal_pos);
-
-            ShowTree(rootStart,Color.red);
-            ShowTree(rootGoal,Color.blue);
-            ShowingTreeAndPath(meetingPoints);
-
+            StateCar initialState = new StateCar(start_pos, 0, 0);
+            StateCar finalState = RRT(initialState);
+            ShowTree(initialState, Color.red);
+            ShowingTreeAndPath(finalState);
+            currentState = my_path.Pop();
         }
 
-        private void ShowingTreeAndPath((StateCar,StateCar) finalStates)
+        private void ShowingTreeAndPath(StateCar finalStates)
         {
             //Recreating the path
-            StateCar currentState = finalStates.Item1;
-            my_path.Add(currentState);
+            StateCar currentState = finalStates;
             while (!(currentState.parent is null))
             {
-                my_path.Add((StateCar) currentState.parent);
+                my_path.Push((StateCar)currentState.parent);
                 Debug.DrawLine(currentState.pos, currentState.parent.pos, Color.green, Mathf.Infinity, false);
-                currentState= (StateCar) currentState.parent;
-            }
-            my_path.Reverse();
-            currentState = finalStates.Item2;
-            my_path.Add(currentState);
-            while (!(currentState.parent is null))
-            {
-                my_path.Add((StateCar) currentState.parent);
-                Debug.DrawLine(currentState.pos, currentState.parent.pos, Color.green, Mathf.Infinity, false);
-                currentState =(StateCar) currentState.parent;
+                currentState = (StateCar)currentState.parent;
             }
         }
 
-        private void ShowTree(StateCar currentState,Color color)
+        private void ShowTree(StateCar currentState, Color color)
         {
+            //Drawing the tree
             if (currentState.children.Count != 0)
             {
-                foreach( StateCar child in currentState.children)
+                foreach (StateCar child in currentState.children)
                 {
                     Debug.DrawLine(currentState.pos, child.pos, color, Mathf.Infinity, false);
-                    ShowTree(child,color);
+                    ShowTree(child, color);
                 }
             }
         }
 
         private void InitializeRRTParameters()
         {
-
             //Relative to Terrain
             start_pos = terrain_manager.myInfo.start_pos;
             goal_pos = terrain_manager.myInfo.goal_pos;
             terrainCenter = new Vector2(terrain_manager.myInfo.x_high + terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high + terrain_manager.myInfo.z_low);
             terrainCenter /= 2;
             terrainSize = Mathf.Max(terrain_manager.myInfo.x_high - terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high - terrain_manager.myInfo.z_low) / 2;
-            goalRadius = FindObjectOfType<GameManager>().goal_tolerance;
+            goalRadiusSquared = FindObjectOfType<GameManager>().goal_tolerance / 2;
+            goalRadiusSquared *= goalRadiusSquared;
+
 
             //Relative to RRT
-            fixedDeltaTime = Time.fixedDeltaTime;
-            rootStart = new StateCar(start_pos, 0, Mathf.Deg2Rad * 90);
+            StateCar.InitializeInputs();
+            fixedDeltaTime = Time.fixedDeltaTime * timeStepScaling;
 
-            //Finding the orientation of the goal
-            float maxDistance = -Mathf.Infinity;
-            float angle = 0;
-            for (int i = 0; i< 4;i++)
-            {
-                if (Physics.Raycast(goal_pos,new Vector3(Mathf.Cos(Mathf.PI/2*i),0, Mathf.Sin(Mathf.PI / 2 * i)), out RaycastHit hit, LayerMask.GetMask("Wall")))
-                {
-                    if (hit.distance > maxDistance)
-                    {
-                        maxDistance = hit.distance;
-                        angle = Mathf.PI / 2 * i;
-                    }
-                }
-                else
-                {
-                    maxDistance = Mathf.Infinity;
-                    angle = Mathf.PI / 2 * i;
-                }
-            }
-            rootGoal = new StateCar(goal_pos,0,angle);
-            kdTreeStart = new KdTree(true)
-            {
-                rootStart
-            };
-            kdTreeGoal = new KdTree(true)
-            {
-                rootGoal
-            };
-
-            my_path = new List<StateCar>();
+            my_path = new Stack<StateCar>();
 
         }
 
         private void FixedUpdate()
         {
-            if (!(my_path[0] is null))
+            if (my_path.Count != 0)
             {
-                MoveCar();
-                currentGoalPos.transform.position = my_path[0].pos;
+                MoveDrone();
             }
         }
 
-        private void MoveCar()
+        private void MoveDrone()
         {
             if (my_path.Count == 0)
             {
-                arrivedAtGoal = true;
                 return;
             }
-            Vector3 projectedPosition = new Vector3(this.transform.position.x, 0, transform.position.z);
-            while (Vector3.Distance(my_path[0].pos, projectedPosition) < validationDistance)
+            Vector3 projectedPos = new Vector3(transform.position.x, 0, transform.position.z);
+            if (Vector3.Distance(projectedPos, currentState.pos) < 2)
             {
-                my_path.RemoveAt(0);
+
+                currentState = my_path.Pop();
+                currentGoalPos.transform.position = currentState.pos;
             }
-            currentGoal = my_path[0];
-            currentGoalPos.transform.position = currentGoal.pos;
-            (float, float) inputs = GoTo(currentGoal.pos);
-            m_Car.Move(inputs.Item2, inputs.Item1,inputs.Item1,0);
+            float steering = 0; //To compute
+            float accel = 0; //To compute
+            float footbrake = 0; //To compute
+            float handbrake = 0; //To compute
+            m_Car.Move(steering, accel, footbrake, handbrake);
         }
 
-
-        private (StateCar, StateCar) RRT(Vector3 xStart, Vector3 xGoal)
+        private StateCar RRT(StateCar lastTreeState)
         {
-            int i = 0;
-            while (i < numberOfIterations)
+            List<StateCar> V = new List<StateCar>
+        {
+            lastTreeState
+        };
+            for (int i = 0; i < numberOfIterations; i++)
             {
-                i += 1;
-                Vector3 xRand = SamplePointInMaze(true);
-                StateCar xNew = Extend(rootStart, xRand, true);
-                if (!(xNew is null) && Connect(xNew, out StateCar otherTreeState, false))
+                Vector3 xRandom = SamplePointInMaze(goal_pos);
+                StateCar xNear = Nearest(V, xRandom);
+                if (Control(xNear, xRandom, out StateCar newState))
                 {
-                    return (xNew, otherTreeState);
-                }
-                StateCar xOtherTree;
-                if (!(xNew is null))
-                {
-                    xOtherTree = Extend(rootGoal, xNew.pos, false);
-                    if (!(xOtherTree is null) && Connect(xOtherTree, out otherTreeState, true))
+                    V.Add(newState);
+                    newState.parent = xNear;
+                    xNear.children.Add(newState);
+                    if ((newState.pos - goal_pos).sqrMagnitude < goalRadiusSquared)
                     {
-                        return (otherTreeState, xOtherTree);
+                        return newState;
                     }
                 }
-                else
-                {
-                    Extend(rootGoal, xRand, false);
-                }
-            }
-            return (null, null);
-        }
-
-        private StateCar Extend(StateCar treeRoot, Vector3 xRand, bool startTree)
-        {
-            //Sampling random pos in the maze
-            //Finding nearest point of xRand in the graph
-            StateCar xNearest = Nearest(xRand, startTree);
-            StateCar newState = Steer(xNearest, xRand);
-            if (CollisionFree(xNearest.pos, newState.pos)) // If we can go to xNearest to xNew, we add xNew to the graph
-            {
-                if (startTree)
-                {
-                    kdTreeStart.Add(newState);
-                }
-                else
-                {
-                    kdTreeGoal.Add(newState);
-                }
-                newState.parent = xNearest;
-                xNearest.children.Add(newState);
-                return newState;
             }
             return null;
         }
 
 
-        private bool Connect(StateCar xNew, out StateCar otherTreeState,bool isStartTree)
+        private StateCar NewState(StateCar xNearest, float accelX, float accelY, float timeStep)
         {
-            otherTreeState = Nearest(xNew.pos, isStartTree);
-            if (Vector3.Distance(otherTreeState.pos, xNew.pos) < validationDistance/2)
+            Vector3 newPos = Vector3.zero; //To compute
+            float newXSpeed = 0; //To compute
+            float newYSpeed = 0; //To compute
+            return new StateCar(newPos, newXSpeed, newYSpeed);
+        }
+
+        private bool CollisionFree(Vector3 xStart, Vector3 xEnd)
+        {
+            ///Maybe to change for the car 
+            //return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(droneHalfWidth, 1, (xEnd - xStart).magnitude / 2 + droneHalfLength), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
+            return (!Physics.SphereCast(xStart, 5, xEnd - xStart, out _, (xEnd - xStart).magnitude, LayerMask.GetMask("Wall")));
+        }
+
+        private Vector3 SamplePointInMaze(Vector3 xGoal)
+        {
+            if (Random.value <= 0.9)
             {
-                return true;
-            }
-            return false;
-        }
-
-        //private StateCar NewState(StateCar xNearest, float accel, float steering, float timeStep,float torque = 2000)
-        //{
-        //    (float, float, float,float, float) values = (xNearest.pos.x, xNearest.pos.z, xNearest.currentXSpeed,xNearest.currentYSpeed, xNearest.currentAngle);
-        //    (float, float, float, float,float) derivatives = GetDerivatives(values, timeStep, accel, steering);
-        //    Vector3 newPos = new Vector3(values.Item1 + derivatives.Item1*timeStep, 0, values.Item2 + derivatives.Item2*timeStep);
-        //    float newXSpeed = values.Item3 + derivatives.Item3 * timeStep;
-        //    float newYSpeed = values.Item4 + derivatives.Item4 * timeStep;
-        //    float currentSpeed = Mathf.Sqrt(Mathf.Pow(newXSpeed, 2) + Mathf.Pow(newYSpeed, 2));
-        //    float normalizedSpeed = Mathf.Clamp(currentSpeed, 0, m_Car.MaxSpeed);
-        //    newXSpeed = normalizedSpeed * newXSpeed / currentSpeed;
-        //    newYSpeed = normalizedSpeed * newYSpeed / currentSpeed;
-        //    float newAngle = values.Item5 + derivatives.Item5* timeStep;
-        //    return new StateCar(newPos, newXSpeed,newYSpeed, newAngle, accel, steering);
-        //}
-
-        //private (float,float,float,float,float) GetDerivatives((float, float, float,float, float) state,float timeStep, float accel, float steering,float torque = 2000)
-        //{
-        //    float currentSpeed = Mathf.Sqrt(Mathf.Pow(state.Item3, 2) + Mathf.Pow(state.Item4, 2));
-        //    currentSpeed = Mathf.Sqrt(Mathf.Pow(currentSpeed + accel*torque*timeStep, 2) + Mathf.Pow(state.Item4+accel*torque*timeStep, 2));
-        //    float angleDerivative = currentSpeed * Mathf.Tan(Mathf.Deg2Rad * steering * m_Car.m_MaximumSteerAngle) / carLength;
-        //    return (currentSpeed*state.Item3* Mathf.Cos(state.Item5+angleDerivative*timeStep),
-        //        currentSpeed * Mathf.Sin(state.Item5 + angleDerivative * timeStep),
-        //        torque*accel*Mathf.Cos(state.Item5 + angleDerivative * timeStep) - angleDerivative*currentSpeed*Mathf.Sin(state.Item5 + angleDerivative * timeStep),
-        //        torque * accel * Mathf.Sin(state.Item5 + angleDerivative * timeStep) + angleDerivative * currentSpeed * Mathf.Sin(state.Item5 + angleDerivative * timeStep),
-        //        angleDerivative); //2000 is approximate torque
-        //}
-
-        private StateCar NewState(StateCar xNearest, float accel, float steering, float timeStep, float torque = 2000)
-        {
-            (float, float, float, float) values = (xNearest.pos.x, xNearest.pos.z, xNearest.currentSpeed, xNearest.currentAngle);
-            (float, float) derivatives = GetDerivatives(values, timeStep, accel, steering);
-            Vector3 newPos = new Vector3(values.Item1 + derivatives.Item1 * timeStep*Mathf.Cos(values.Item4), 0, values.Item2 + derivatives.Item1 * timeStep * Mathf.Sin(values.Item4));
-            float newSpeed = xNearest.currentSpeed + derivatives.Item1 * timeStep;
-            newSpeed = Mathf.Clamp(newSpeed, 0, m_Car.MaxSpeed);
-            float newAngle = xNearest.currentAngle + derivatives.Item2* timeStep;
-            return new StateCar(newPos, newSpeed,newAngle);
-        }
-
-        private (float, float) GetDerivatives((float, float, float, float) state, float timeStep, float accel, float steering, float torque = 2000)
-        {
-            return (accel * torque, state.Item3 * Mathf.Tan(Mathf.Deg2Rad * steering * m_Car.m_MaximumSteerAngle) / carLength);
-        }
-
-
-        private bool CollisionFree(Vector3 xStart,Vector3 xEnd)
-        {
-            //return (!Physics.Raycast(xStart, (xEnd - xStart).normalized, Vector3.Distance(xStart, xEnd), LayerMask.GetMask("Wall"))); //When the car is considered a point
-            return !Physics.CheckBox((xStart + xEnd) / 2, new Vector3(carHalfWidth, 1, (xEnd - xStart).magnitude / 2 + carLength), Quaternion.LookRotation((xEnd - xStart).normalized, Vector3.up), LayerMask.GetMask("Wall")); // We consider the car as a box
-        }
-
-        private Vector3 SamplePointInMaze(bool isStartTree)
-        {
-            if (UnityEngine.Random.value <= 0.99)
-            {
-                Vector3 xRand = new Vector3(2 * UnityEngine.Random.value - 1, 0, 2 * UnityEngine.Random.value - 1);
+                Vector3 xRand = new Vector3(2 * Random.value - 1, 0, 2 * Random.value - 1);
                 xRand *= terrainSize; //Sampling random pos in the maze
                 xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
+                if (Physics.CheckSphere(xRand, 1, LayerMask.GetMask("Wall")))
+                {
+                    xRand = new Vector3(2 * Random.value - 1, 0, 2 * Random.value - 1);
+                    xRand *= terrainSize; //Sampling random pos in the maze
+                    xRand += new Vector3(terrainCenter.x, 0, terrainCenter.y);
+                }
                 return xRand;
             }
-            if (isStartTree)
-            {
-                return goal_pos; // sampling the goal 1% of the time to help convergence
-            }
-            return start_pos;
+            return xGoal; // sampling the goal 1% of the time to help convergence
         }
 
-        private StateCar Nearest(Vector3 xRand,bool isStartTree)
+        private StateCar Nearest(List<StateCar> V, Vector3 xRand)
         {
-            //State xMin = new State(Vector3.zero, 0, 0, 0, 0);
-            //float minDist = Mathf.Infinity;
-            //foreach (State x in V)
-            //{
-            //    float temp = Vector3.Distance(x.pos, xRand);
-            //    if (temp < minDist)
-            //    {
-            //        minDist = temp;
-            //        xMin = x;
-            //    }
-            //}
-            //return xMin;
-            if (isStartTree)
+            StateCar xMin = null;
+            StateCar xMinPrime = null;
+            float minDist = Mathf.Infinity;
+            float minDistPrime = Mathf.Infinity;
+            foreach (StateCar x in V)
             {
-                return (StateCar) kdTreeStart.FindClosest(xRand);
-            }
-            return (StateCar) kdTreeGoal.FindClosest(xRand);
-        }
-
-        private StateCar Steer(StateCar xNearest,Vector3 xRand)
-        {
-            float distance = Mathf.Infinity;
-            //float bestAngle = 0;
-            StateCar finalState = new StateCar(Vector3.zero, 0,0);
-            for (float steering=-1; steering<1.01;steering+=0.1f){
-                for (float accel = -1;accel <1.01;accel += 0.1f)
+                if (x.statesLeft.Count != 0)
                 {
-                    StateCar newState = NewState(xNearest, accel, steering, fixedDeltaTime);
-                    float newDistance = Vector3.Distance(newState.pos, xRand);
-                    if (newDistance< distance)
+                    float temp = (x.pos - xRand).sqrMagnitude;
+                    if (temp < minDistPrime)
                     {
-                        distance = newDistance;
-                        finalState = newState;
+                        minDistPrime = temp;
+                        xMinPrime = x;
+                    }
+                    if (Random.value > x.violationFrequency && temp < minDist)
+                    {
+                        minDist = temp;
+                        xMin = x;
                     }
                 }
             }
-            return finalState;
+            if (minDist != Mathf.Infinity)
+            {
+                return xMin;
+            }
+            return xMinPrime;
         }
 
-        private (float, float) GoTo(Vector3 xGoal)
-        {
-            float distance = Mathf.Infinity;
-            Vector3 projectedPosition = new Vector3(transform.position.x, 0, transform.position.z);
-            float angle = Vector3.Angle(Vector3.right, transform.forward);
-            if (angle < 0) { angle += 2 * Mathf.PI; }
-            StateCar CurrentState = new StateCar(projectedPosition,m_Car.CurrentSpeed, angle);
-            float finalAccel = 0;
-            float finalSteering= 0;
 
-            for (float steering = -1; steering < 1.01; steering += 0.05f)
+        private bool Control(StateCar xNear, Vector3 xRand, out StateCar newState)
+        {
+            float dMin = Mathf.Infinity;
+            bool success = false;
+            int uBest = -1;
+            Stack<int> statesToRemove = new Stack<int>();
+            newState = null;
+            foreach (int i in xNear.statesLeft)
             {
-                for (float accel = -1; accel < 1.01; accel += 0.05f)
+                StateCar xPrime = NewState(xNear, StateCar.possibleInputs[i].Item1, StateCar.possibleInputs[i].Item2, fixedDeltaTime);
+                if (CollisionFree(xNear.pos, xPrime.pos))
                 {
-                    StateCar newState = NewState(CurrentState, accel, steering, fixedDeltaTime);
-                    float newDistance = Vector3.Distance(newState.pos, xGoal);
-                    if (newDistance < distance)
+                    float d = (xPrime.pos - xRand).sqrMagnitude;
+                    if (d < dMin)
                     {
-                        distance = newDistance;
-                        finalAccel = accel;
-                        finalSteering= steering;
+                        dMin = d;
+                        success = true;
+                        uBest = i;
+                        newState = xPrime;
                     }
                 }
+                else
+                {
+                    statesToRemove.Push(i);
+                    UpdateTreeInfo(xNear);
+                }
             }
-            return (finalAccel, finalSteering);
+            statesToRemove.Push(uBest);
+            foreach (int i in statesToRemove)
+            {
+                xNear.statesLeft.Remove(i);
+            }
+            return success;
         }
 
+
+        private void UpdateTreeInfo(StateCar xNear)
+        {
+            float m = StateCar.numberOfPossibleInputs;
+            float p = 1 / m;
+            xNear.violationFrequency += p;
+            p *= p;
+            StateCar x1 = xNear;
+            while (!(x1.parent is null))
+            {
+                x1 = (StateCar)x1.parent;
+                x1.violationFrequency += p;
+                p /= m;
+            }
+        }
     }
 }
