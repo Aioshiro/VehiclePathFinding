@@ -107,7 +107,7 @@ public class DroneAI : MonoBehaviour
             return;
         }
         Vector3 projectedPos = new Vector3 (transform.position.x, 0, transform.position.z);
-        if (Vector3.Distance(projectedPos, currentState.pos) < 2)
+        if (Vector3.Distance(projectedPos, currentState.pos) < 2.5f)
         {
 
             currentState = my_path.Pop();
