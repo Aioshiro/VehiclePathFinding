@@ -300,8 +300,8 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 534669902}
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 64.267365, y: 2.000915, z: 72.3}
+  m_LocalRotation: {x: 0.43572754, y: 0.5590136, z: -0.44497764, w: 0.54739404}
+  m_LocalPosition: {x: 93.88134, y: 501.82336, z: 256.90027}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
@@ -1142,6 +1142,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   terrain_manager: {fileID: 1358011049}
-  validationDistance: 4
-  numberOfIterations: 20000
+  numberOfIterations: 100000
   currentGoalPos: {fileID: 1686694543}
+  currentState:
+    pos: {x: 0, y: 0, z: 0}
+    currentXSpeed: 0
+    currentYSpeed: 0
+    statesLeft: 
+    violationFrequency: 0
+  timeStepScaling: 9

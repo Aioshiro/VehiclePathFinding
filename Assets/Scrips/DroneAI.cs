@@ -25,13 +25,9 @@ public class DroneAI : MonoBehaviour
     private float droneRadius;
 
     public GameObject currentGoalPos;
-    //private StateDrone rootStart;
-    //private StateDrone rootGoal;
-    //private KdTree kdTreeStart;
-    //private KdTree kdTreeGoal;
     private float maxAccel=15.0f;
-    //private List<StateDrone> VGoal;
     [SerializeField] private StateDrone currentState;
+    [SerializeField] private float timeStepScaling = 1.0f;
 
     private void Start()
     {
@@ -45,11 +41,10 @@ public class DroneAI : MonoBehaviour
 
         StateDrone initialState = new StateDrone(start_pos, 0, 0,(0,0));
         StateDrone finalState = RRT(initialState);
-
         ShowTree(initialState, Color.red);
         //ShowTree(rootGoal, Color.blue);
         ShowingTreeAndPath(finalState);
-
+        currentState = my_path.Pop();
     }
 
     private void ShowingTreeAndPath(StateDrone finalStates)
@@ -84,14 +79,14 @@ public class DroneAI : MonoBehaviour
         terrainCenter = new Vector2(terrain_manager.myInfo.x_high + terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high + terrain_manager.myInfo.z_low);
         terrainCenter /= 2;
         terrainSize = Mathf.Max(terrain_manager.myInfo.x_high - terrain_manager.myInfo.x_low, terrain_manager.myInfo.z_high - terrain_manager.myInfo.z_low) / 2;
-        goalRadiusSquared = FindObjectOfType<GameManager>().goal_tolerance;
+        goalRadiusSquared = FindObjectOfType<GameManager>().goal_tolerance/2;
         goalRadiusSquared *= goalRadiusSquared;
         droneRadius = this.GetComponent<SphereCollider>().radius+1f;
 
 
         //Relative to RRT
         StateDrone.InitializeInputs();
-        fixedDeltaTime = Time.fixedDeltaTime;
+        fixedDeltaTime = Time.fixedDeltaTime*timeStepScaling;
 
         my_path = new Stack<StateDrone>();
 
@@ -111,9 +106,16 @@ public class DroneAI : MonoBehaviour
         {
             return;
         }
-        currentState = my_path.Pop();
-        currentGoalPos.transform.position = currentState.pos;
-        m_Drone.Move(currentState.inputFromLastState.Item1, currentState.inputFromLastState.Item2);
+        Vector3 projectedPos = new Vector3 (transform.position.x, 0, transform.position.z);
+        if (Vector3.Distance(projectedPos, currentState.pos) < 2)
+        {
+
+            currentState = my_path.Pop();
+            currentGoalPos.transform.position = currentState.pos;
+        }
+        float xAccel = (currentState.currentXSpeed - m_Drone.velocity.x) / (fixedDeltaTime * m_Drone.max_acceleration);
+        float yAccel = (currentState.currentYSpeed - m_Drone.velocity.z) / (fixedDeltaTime * m_Drone.max_acceleration);
+        m_Drone.Move(xAccel, yAccel);
     }
 
     private StateDrone RRT(StateDrone lastTreeState)
