@@ -148,7 +148,7 @@ namespace UnityStandardAssets.Vehicles.Car
         private StateCar NewState(StateCar xNearest, float accelX, float accelY, float timeStep)
         {
             Vector3 newPos = xNearest; //To compute
-            float newSpeed = StateCar.currentSpeed + fixedTimeScale * (StateCar.currentSpeed*timeScale); //(eulers formula) v(t + fixedTimeScale) = v(t) + fixedTimeScale * acceleration(t)
+            float newSpeed = StateCar.currentSpeed + timeScale * (StateCar.currentSpeed*timeScale); //(eulers formula) v(t + fixedTimeScale) = v(t) + fixedTimeScale * acceleration(t)
             float newAngle = StateCar.currentSpeed/1 * Math.Tan(currentAngle); // need length or car
             return new StateCar(newPos, newSpeed, newAngle);
         }
