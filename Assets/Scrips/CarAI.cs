@@ -149,7 +149,7 @@ namespace UnityStandardAssets.Vehicles.Car
         {
 
             float newSpeed = StateCar.currentSpeed + timeScale * accel; //(eulers formula) v(t + fixedTimeScale) = v(t) + fixedTimeScale * acceleration(t)
-            float newAngle = StateCar.currentSpeed/4 * Math.Tan(steering*Mathf.Deg2Rad*m_car.m_MaximumSteerAngle); 
+            float newAngle = StateCar.currentSpeed/4 * Math.Tan(steering*Mathf.Deg2Rad*m_Car.m_MaximumSteerAngle); 
             Vector3 newPos = new Vector3(xNearest.pos.x + newSpeed*Mathf.Cos(newAngle)*fixedDeltaTime,b,c)
             Vector3 newPos = xNearest.pos*; //To compute
             return new StateCar(newPos, newSpeed, newAngle);
