@@ -147,9 +147,10 @@ namespace UnityStandardAssets.Vehicles.Car
 
         private StateCar NewState(StateCar xNearest, float accelX, float accelY, float timeStep)
         {
-            Vector3 newPos = Vector3.zero; //To compute
-            float newVelocity = 0 //To compute (eulers formula) v(t + fixedTimeScale) = v(t) + fixedTimeScale * derivative(x)
-            return new StateCar(newPos, newVelocity);
+            Vector3 newPos = xNearest; //To compute
+            float newSpeed = StateCar.currentSpeed + fixedTimeScale * StateCar.currentSpeed*timeStepScaling //To compute (eulers formula) v(t + fixedTimeScale) = v(t) + fixedTimeScale * derivative(x)
+            float newAngle = 0 //To compute
+            return new StateCar(newPos, newSpeed, newAngle);
         }
 
         private bool CollisionFree(Vector3 xStart, Vector3 xEnd)
