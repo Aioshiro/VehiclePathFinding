@@ -116,9 +116,8 @@ namespace UnityStandardAssets.Vehicles.Car
             }
             float steering = 0; //To compute
             float accel = 0; //To compute
-            float footbrake = 0; //To compute
             float handbrake = 0; //To compute
-            m_Car.Move(steering, accel, footbrake, handbrake);
+            m_Car.Move(steering, accel, accel, handbrake);
         }
 
         private StateCar RRT(StateCar lastTreeState)
@@ -149,9 +148,8 @@ namespace UnityStandardAssets.Vehicles.Car
         private StateCar NewState(StateCar xNearest, float accelX, float accelY, float timeStep)
         {
             Vector3 newPos = Vector3.zero; //To compute
-            float newXSpeed = 0; //To compute
-            float newYSpeed = 0; //To compute
-            return new StateCar(newPos, newXSpeed, newYSpeed);
+            float newVelocity = 0 //To compute (eulers formula) v(t + fixedTimeScale) = v(t) + fixedTimeScale * derivative(x)
+            return new StateCar(newPos, newVelocity);
         }
 
         private bool CollisionFree(Vector3 xStart, Vector3 xEnd)
